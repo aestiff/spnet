@@ -2,13 +2,14 @@
 // Created by Eugene M. Izhikevich, May 17, 2004, San Diego, CA
 // Saves spiking data each second in file spikes.dat
 // To plot spikes, use MATLAB code: load spikes.dat;plot(spikes(:,1),spikes(:,2),'.');
-#include <iostream.h>
+#include <iostream>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h> 
 
 #define getrandom(max1) ((rand()%(int)((max1)))) // random integer between 0 and max-1
-												
+using namespace std;
+
 const	int		Ne = 800;		// excitatory neurons			
 const	int		Ni = 200;		// inhibitory neurons				 
 const	int		N  = Ne+Ni;		// total number of neurons	
@@ -128,16 +129,15 @@ void initialize()
     firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
     firings[0][1]=0;	// index of the dummy spike
   }
-  
-void main()
-{
+}
+int main(){
   int		i, j, k, sec, t;
   float	I[N];
   FILE	*fs;
   
   initialize();	// assign connections, weights, etc. 
   
-  for (sec=0; sec<60*60*24; sec++)		// simulation of 1 day
+  for (sec=0; sec<60; sec++)		// simulation of 1 minute
     {
       for (t=0;t<1000;t++)				// simulation of 1 sec
 	{
@@ -218,4 +218,5 @@ void main()
 	  }
       }
     }
+  return 0;
 }
