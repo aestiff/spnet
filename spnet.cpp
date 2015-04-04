@@ -3,6 +3,8 @@
 // Saves spiking data each second in file spikes.dat
 // To plot spikes, use MATLAB code: load spikes.dat;plot(spikes(:,1),spikes(:,2),'.');
 #include <iostream>
+#include <fstream>
+#include <string>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h> 
@@ -15,19 +17,19 @@ const	int		Ni = 200;		// inhibitory neurons
 const	int		N  = Ne+Ni;		// total number of neurons	
 const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
-		float	sm = 10.0;		// maximal synaptic strength		
-int		post[N][M];				// indeces of postsynaptic neurons
-float	s[N][M], sd[N][M];		// matrix of synaptic weights and their derivatives
-short	delays_length[N][D];	// distribution of delays
-short	delays[N][D][M];		// arrangement of delays   
-int		N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
-float	*s_pre[N][3*M], *sd_pre[N][3*M];		// presynaptic weights
-float	LTP[N][1001+D], LTD[N];	// STDP functions 
+float	sm = 10.0;		                // maximal synaptic strength		
+int	post[N][M];				// indeces of postsynaptic neurons
+float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
+short	delays_length[N][D];	                // distribution of delays
+short	delays[N][D][M];		        // arrangement of delays   
+int	N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
+float	*s_pre[N][3*M], *sd_pre[N][3*M];	// presynaptic weights
+float	LTP[N][1001+D], LTD[N];	                // STDP functions 
 float	a[N], d[N];				// neuronal dynamics parameters
 float	v[N], u[N];				// activity variables
-int		N_firings;				// the number of fired neurons 
-const int N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
-int		firings[N_firings_max][2]; // indeces and timings of spikes
+int	N_firings;				// the number of fired neurons 
+const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
+int	firings[N_firings_max][2];              // indeces and timings of spikes
 
 void initialize()
 {	int i,j,k,jj,dd, exists, r;
@@ -130,12 +132,28 @@ void initialize()
     firings[0][1]=0;	// index of the dummy spike
   }
 }
-int main(){
+int main(int argc, char *argv[]){
   int		i, j, k, sec, t;
   float	I[N];
   FILE	*fs;
   
   initialize();	// assign connections, weights, etc. 
+
+  bool fileInput = false;
+  ifstream inputData;
+  int step = 1;
+  string inputLine;
+  
+  if (argc > 1) {
+    fileInput = true;
+    inputData.open(argv[1]);
+    if (inputData.is_open()){
+      getline(inputData, inputLine);
+      //TODO: parse config line
+    } else {
+      cout << "Could not open file.";
+    }
+  }
   
   for (sec=0; sec<60; sec++)		// simulation of 1 minute
     {
@@ -144,9 +162,12 @@ int main(){
 	  for (i=0;i<N;i++){
 	    I[i] = 0.0;	// reset the input
 	  }
-	  for (k=0;k<N/1000;k++){
-	    I[getrandom(N)]=20.0;		// random thalamic input
-	    //TODO: Change this to (or add?) structured input
+	  if (!fileInput){
+	    for (k=0;k<N/1000;k++){
+	      I[getrandom(N)]=20.0; // random thalamic input
+	    }
+	  } else {
+	    //TODO: Add structured input
 	  }
 	  for (i=0;i<N;i++) {
 	    if (v[i]>=30)    // did it fire?
