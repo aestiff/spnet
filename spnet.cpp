@@ -7,10 +7,12 @@
 #include <string>
 #include <math.h>
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
+#include <tclap/CmdLine.h>
 
 #define getrandom(max1) ((rand()%(int)((max1)))) // random integer between 0 and max-1
 using namespace std;
+using namespace TCLAP;
 
 const	int		Ne = 800;		// excitatory neurons			
 const	int		Ni = 200;		// inhibitory neurons				 
@@ -136,25 +138,33 @@ int main(int argc, char *argv[]){
   int		i, j, k, sec, t;
   float	I[N];
   FILE	*fs;
-  
-  initialize();	// assign connections, weights, etc. 
-
   bool fileInput = false;
   ifstream inputData;
   int step = 1;
   string inputLine;
-  
-  if (argc > 1) {
-    fileInput = true;
-    inputData.open(argv[1]);
-    if (inputData.is_open()){
-      getline(inputData, inputLine);
-      //TODO: parse config line
-    } else {
-      cout << "Could not open file.";
+
+  try{
+    CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
+    ValueArg<string> inFile("i","input","name of file containing input values",false,"","string");
+    cmd.add(inFile);
+    cmd.parse(argc, argv);
+    string fileHandle = inFile.getValue();
+    if (fileHandle != ""){
+      fileInput = true;
+      inputData.open(argv[1]);
+      if (inputData.is_open()){
+	getline(inputData, inputLine);
+	//TODO: parse config line
+      } else {
+	cout << "Could not open file.";
+      }
     }
+  } catch (ArgException &e){
+    //do stuff
   }
+    
   
+  initialize();	// assign connections, weights, etc.  
   for (sec=0; sec<60; sec++)		// simulation of 1 minute
     {
       for (t=0;t<1000;t++)				// simulation of 1 sec
