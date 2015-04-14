@@ -14,8 +14,8 @@
 using namespace std;
 using namespace TCLAP;
 
-const	int		Ne = 800;		// excitatory neurons			
-const	int		Ni = 200;		// inhibitory neurons				 
+const   int		Ne = 800;		// excitatory neurons			
+const   int		Ni = 200;		// inhibitory neurons				 
 const	int		N  = Ne+Ni;		// total number of neurons	
 const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
@@ -34,7 +34,10 @@ const   int         N_firings_max=100*N;	// upper limit on the number of fired n
 int	firings[N_firings_max][2];              // indeces and timings of spikes
 
 void initialize()
-{	int i,j,k,jj,dd, exists, r;
+{
+  //  Ne = Nexc;
+  //  Ni = Ninh;
+  int i,j,k,jj,dd, exists, r;
   for (i=0;i<Ne;i++){
     a[i]=0.02;// RS type
   }
@@ -54,7 +57,7 @@ void initialize()
 	  exists = 0;		// avoid multiple synapses
 	  if (i<Ne) r = getrandom(N);
 	  else	  r = getrandom(Ne);// inh -> exc only
-	  if (r==i) exists=1;									// no self-synapses 
+	  if (r==i) exists=1;				      	// no self-synapses 
 	  for (k=0;k<j;k++) if (post[i][k]==r) exists = 1;	// synapse already exists  
 	}while (exists == 1);
 	post[i][j]=r;
@@ -140,44 +143,88 @@ int main(int argc, char *argv[]){
   FILE	*fs;
   bool fileInput = false;
   ifstream inputData;
-  int step = 1;
+  short step = 10;
+  int inFeat = 0;
   string inputLine;
+  //int Nexc, Ninh;
 
   try{
     CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
     ValueArg<string> inFile("i","input","name of file containing input values",false,"","string");
+    //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
+    //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
     cmd.add(inFile);
+    //cmd.add(excite);
+    //cmd.add(inhibit);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     if (fileHandle != ""){
       fileInput = true;
-      inputData.open(argv[1]);
+      inputData.open(fileHandle);
       if (inputData.is_open()){
 	getline(inputData, inputLine);
-	//TODO: parse config line
+	//TODO: make this suck less.
+	string tok;
+	size_t pos = 0;
+	pos = inputLine.find(' ');
+	tok = inputLine.substr(0,pos);
+	step = stoi(tok);
+	tok = inputLine.substr(pos,inputLine.length()-2);
+	inFeat = stoi(tok);
+	//load first input line
+	getline(inputData, inputLine);
       } else {
-	cout << "Could not open file.";
+	cout << "Could not open file." << endl;
       }
     }
+    //Nexc = excite.getValue();
+    //Ninh = inhibit.getValue();
   } catch (ArgException &e){
     //do stuff
+    cerr << e.what();
+    return 1;
   }
     
   
   initialize();	// assign connections, weights, etc.  
-  for (sec=0; sec<60; sec++)		// simulation of 1 minute
+  short framesLeft = 0;
+  bool done = false;
+  sec = 0;
+  bool preDone = false;
+  while (!done)		// different ways to be done
     {
-      for (t=0;t<1000;t++)				// simulation of 1 sec
+      t = 0;
+      while (t<1000 && !done)				// simulation of 1 sec
 	{
-	  for (i=0;i<N;i++){
-	    I[i] = 0.0;	// reset the input
-	  }
 	  if (!fileInput){
+	    for (i=0;i<N;i++){
+	      I[i] = 0.0;	// reset the input
+	    }
 	    for (k=0;k<N/1000;k++){
 	      I[getrandom(N)]=20.0; // random thalamic input
 	    }
 	  } else {
-	    //TODO: Add structured input
+	    //TODO: test this
+	    if (framesLeft == 0){
+	      //parse input
+	      size_t pos = 0;
+	      for (int ii=0;ii<inFeat;ii++){
+		I[ii] = stof(inputLine,&pos)/step;
+		inputLine.erase(0,pos);
+	      }
+	      //load next line (or stop)
+      	      getline(inputData, inputLine);
+	      if (inputData.eof()){
+		preDone = true;
+	      }
+	      //reset framesLeft
+	      framesLeft = step;
+	    } else {
+	      framesLeft--;
+	      if (preDone && framesLeft == 0){
+		done = true;
+	      }
+	    }
 	  }
 	  for (i=0;i<N;i++) {
 	    if (v[i]>=30)    // did it fire?
@@ -187,11 +234,14 @@ int main(int argc, char *argv[]){
 		LTP[i][t+D]= 0.1;		
 		LTD[i]=0.12;
 		for (j=0;j<N_pre[i];j++){
-		  *sd_pre[i][j]+=LTP[I_pre[i][j]][t+D-D_pre[i][j]-1];// this spike was after pre-synaptic spikes
+		  *sd_pre[i][j]+=LTP[I_pre[i][j]][t+D-D_pre[i][j]-1];
+		  // this spike was after pre-synaptic spikes
 		}
 		firings[N_firings  ][0]=t;
 		firings[N_firings++][1]=i;
-		if (N_firings == N_firings_max) {cout << "Two many spikes at t=" << t << " (ignoring all)";N_firings=1;}
+		if (N_firings == N_firings_max) {
+		  cout << "Two many spikes at t=" << t << " (ignoring all)";N_firings=1;
+		}
 	      }
 	  }
 	  k=N_firings;
@@ -213,6 +263,7 @@ int main(int argc, char *argv[]){
 	      LTP[i][t+D+1]=0.95*LTP[i][t+D];
 	      LTD[i]*=0.95;
 	    }
+	  t++;
 	}
       cout << "sec=" << sec << ", firing rate=" << float(N_firings)/N << "\n";
       fs = fopen("spikes.dat","w");
@@ -247,6 +298,10 @@ int main(int argc, char *argv[]){
 	    if (s[i][j]>sm) s[i][j]=sm;
 	    if (s[i][j]<0) s[i][j]=0.0;
 	  }
+      }
+      sec++;
+      if (sec == 60 && !fileInput){
+	done = true;
       }
     }
   return 0;
