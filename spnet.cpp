@@ -14,10 +14,10 @@
 using namespace std;
 using namespace TCLAP;
 
-const   int		Ne = 100;		// excitatory neurons			
-const   int		Ni = 25;		// inhibitory neurons				 
+const   int		Ne = 800;		// excitatory neurons			
+const   int		Ni = 200;		// inhibitory neurons				 
 const	int		N  = Ne+Ni;		// total number of neurons	
-const	int		M  = 50;		// the number of synapses per neuron 
+const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
 float	sm = 10.0;		                // maximal synaptic strength		
 int	post[N][M];				// indeces of postsynaptic neurons
@@ -64,7 +64,7 @@ void initialize()
       }
     for (i=0;i<Ne;i++){
       for (j=0;j<M;j++){
-	s[i][j]=100.0; // initial exc. synaptic weights
+	s[i][j]=3.0; // initial exc. synaptic weights
       }
     }
     for (i=Ne;i<N;i++){
@@ -188,10 +188,13 @@ int main(int argc, char *argv[]){
   
   initialize();	// assign connections, weights, etc.  
   short framesLeft = 0;
-  int scale = 2;
+  int scale = 1;
   bool done = false;
   sec = 0;
   bool preDone = false;
+  for (i=0;i<N;i++){
+    I[i] = 0.0;	// reset the input
+  }
   while (!done)		// different ways to be done
     {
       t = 0;
@@ -207,9 +210,6 @@ int main(int argc, char *argv[]){
 	  } else {
 	    //TODO: test this
 	    if (framesLeft == 0){
-	      for (i=0;i<N;i++){
-		I[i] = 0.0;	// reset the input
-	      }
 	      //parse input
 	      size_t pos = 0;
 	      for (int ii=0;ii<inFeat;ii++){
@@ -270,7 +270,7 @@ int main(int argc, char *argv[]){
 	  t++;
 	}
       cout << "sec=" << sec << ", firing rate=" << float(N_firings)/N << "\n";
-      
+      if (sec == 0){
       fs = fopen("spikes.dat","w");
       for (i=1;i<N_firings;i++){
 	if (firings[i][0] >=0){
@@ -278,7 +278,7 @@ int main(int argc, char *argv[]){
 	}
       }
       fclose(fs);
-      
+      }
       for (i=0;i<N;i++){		// prepare for the next sec
 	for (j=0;j<D+1;j++){
 	  LTP[i][j]=LTP[i][1000+j];
