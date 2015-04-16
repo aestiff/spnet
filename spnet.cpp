@@ -19,7 +19,7 @@ const   int		Ni = 200;		// inhibitory neurons
 const	int		N  = Ne+Ni;		// total number of neurons	
 const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
-float	sm = 10.0;		                // maximal synaptic strength		
+float	sm = 20.0;		                // maximal synaptic strength		
 int	post[N][M];				// indeces of postsynaptic neurons
 float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
 short	delays_length[N][D];	                // distribution of delays
@@ -62,80 +62,80 @@ void initialize()
 	}while (exists == 1);
 	post[i][j]=r;
       }
-    for (i=0;i<Ne;i++){
-      for (j=0;j<M;j++){
-	s[i][j]=3.0; // initial exc. synaptic weights
-      }
+  }
+  for (i=0;i<Ne;i++){
+    for (j=0;j<M;j++){
+      s[i][j]=6.0; // initial exc. synaptic weights
     }
-    for (i=Ne;i<N;i++){
-      for (j=0;j<M;j++){
-	s[i][j]=-5.0; // inhibitory synaptic weights
-      }
+  }
+  for (i=Ne;i<N;i++){
+    for (j=0;j<M;j++){
+      s[i][j]=-5.0; // inhibitory synaptic weights
     }
-    for (i=0;i<N;i++){
-      for (j=0;j<M;j++){
-	sd[i][j]=0.0; // synaptic derivatives 
-      }
+  }
+  for (i=0;i<N;i++){
+    for (j=0;j<M;j++){
+      sd[i][j]=0.0; // synaptic derivatives 
     }
-    for (i=0;i<N;i++)
-      {
-	short ind=0;
-	if (i<Ne)
-	  {
-	    for (j=0;j<D;j++) 
-	      {	delays_length[i][j]=M/D;	// uniform distribution of exc. synaptic delays
-		for (k=0;k<delays_length[i][j];k++){
-		  delays[i][j][k]=ind++;
-		}
+  }
+  for (i=0;i<N;i++)
+    {
+      short ind=0;
+      if (i<Ne)
+	{
+	  for (j=0;j<D;j++) 
+	    {	delays_length[i][j]=M/D;	// uniform distribution of exc. synaptic delays
+	      for (k=0;k<delays_length[i][j];k++){
+		delays[i][j][k]=ind++;
 	      }
+	    }
+	}
+      else
+	{
+	  for (j=0;j<D;j++){
+	    delays_length[i][j]=0;
 	  }
-	else
-	  {
-	    for (j=0;j<D;j++){
-	      delays_length[i][j]=0;
-	    }
-	    delays_length[i][0]=M;			// all inhibitory delays are 1 ms
-	    for (k=0;k<delays_length[i][0];k++){
-	      delays[i][0][k]=ind++;
-	    }
+	  delays_length[i][0]=M;			// all inhibitory delays are 1 ms
+	  for (k=0;k<delays_length[i][0];k++){
+	    delays[i][0][k]=ind++;
 	  }
-      }
-    
-    for (i=0;i<N;i++)
-      {
-	N_pre[i]=0;
-	for (j=0;j<Ne;j++){
-	  for (k=0;k<M;k++){
-	    if (post[j][k] == i){		// find all presynaptic neurons 
-		I_pre[i][N_pre[i]]=j;	// add this neuron to the list
-		for (dd=0;dd<D;dd++)	// find the delay
-		  for (jj=0;jj<delays_length[j][dd];jj++)
-		    if (post[j][delays[j][dd][jj]]==i) D_pre[i][N_pre[i]]=dd;
-		s_pre[i][N_pre[i]]=&s[j][k];	// pointer to the synaptic weight	
-		sd_pre[i][N_pre[i]++]=&sd[j][k];// pointer to the derivative
-	    }
+	}
+    }
+  
+  for (i=0;i<N;i++)
+    {
+      N_pre[i]=0;
+      for (j=0;j<Ne;j++){
+	for (k=0;k<M;k++){
+	  if (post[j][k] == i){		// find all presynaptic neurons 
+	    I_pre[i][N_pre[i]]=j;	// add this neuron to the list
+	    for (dd=0;dd<D;dd++)	// find the delay
+	      for (jj=0;jj<delays_length[j][dd];jj++)
+		if (post[j][delays[j][dd][jj]]==i) D_pre[i][N_pre[i]]=dd;
+	    s_pre[i][N_pre[i]]=&s[j][k];	// pointer to the synaptic weight	
+	    sd_pre[i][N_pre[i]++]=&sd[j][k];// pointer to the derivative
 	  }
 	}
       }
-    
-    for (i=0;i<N;i++){
-      for (j=0;j<1+D;j++){
-	LTP[i][j]=0.0;
-      }
     }
-    for (i=0;i<N;i++){
-      LTD[i]=0.0;
+  
+  for (i=0;i<N;i++){
+    for (j=0;j<1+D;j++){
+      LTP[i][j]=0.0;
     }
-    for (i=0;i<N;i++){
-      v[i]=-65.0; // initial values for v
-    }
-    for (i=0;i<N;i++){
-      u[i]=0.2*v[i];	// initial values for u
-    }
-    N_firings=1;		// spike timings
-    firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
-    firings[0][1]=0;	// index of the dummy spike
   }
+  for (i=0;i<N;i++){
+    LTD[i]=0.0;
+  }
+  for (i=0;i<N;i++){
+    v[i]=-65.0; // initial values for v
+  }
+  for (i=0;i<N;i++){
+    u[i]=0.2*v[i];	// initial values for u
+  }
+  N_firings=1;		// spike timings
+  firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
+  firings[0][1]=0;	// index of the dummy spike  
 }
 int main(int argc, char *argv[]){
   int		i, j, k, sec, t;
@@ -188,7 +188,7 @@ int main(int argc, char *argv[]){
   
   initialize();	// assign connections, weights, etc.  
   short framesLeft = 0;
-  int scale = 1;
+  float scale = 1.0;
   bool done = false;
   sec = 0;
   bool preDone = false;
@@ -209,11 +209,15 @@ int main(int argc, char *argv[]){
 	    }
 	  } else {
 	    //TODO: test this
+	    int ii;
+	    for (ii=inFeat;ii<N;ii++){
+	      I[ii] = 0.0;
+	    }
 	    if (framesLeft == 0){
 	      //parse input
 	      size_t pos = 0;
-	      for (int ii=0;ii<inFeat;ii++){
-		I[ii] = stof(inputLine,&pos) * scale;
+	      for (ii=0;ii<inFeat;ii++){
+		I[ii] = stof(inputLine,&pos) * scale ;
 		inputLine.erase(0,pos);
 	      }
 	      //load next line (or stop)
@@ -236,7 +240,7 @@ int main(int argc, char *argv[]){
 		v[i] = -65.0;	// voltage reset
 		u[i]+=d[i];	// recovery variable reset
 		LTP[i][t+D]= 0.1;		
-		LTD[i]=0.12;
+		LTD[i]=0.1;
 		for (j=0;j<N_pre[i];j++){
 		  *sd_pre[i][j]+=LTP[I_pre[i][j]][t+D-D_pre[i][j]-1];
 		  // this spike was after pre-synaptic spikes
@@ -244,7 +248,8 @@ int main(int argc, char *argv[]){
 		firings[N_firings  ][0]=t;
 		firings[N_firings++][1]=i;
 		if (N_firings == N_firings_max) {
-		  cout << "Too many spikes at t=" << t << " (ignoring all)";N_firings=1;
+		  cout << "Too many spikes at t=" << t << " (ignoring all)" << endl;
+		  N_firings=1;
 		}
 	      }
 	  }
@@ -265,12 +270,12 @@ int main(int argc, char *argv[]){
 	      v[i]+=0.5*((0.04*v[i]+5)*v[i]+140-u[i]+I[i]); // time step is 0.5 ms
 	      u[i]+=a[i]*(0.2*v[i]-u[i]);
 	      LTP[i][t+D+1]=0.95*LTP[i][t+D];
-	      LTD[i]*=0.95;
+	      LTD[i]*=0.9;
 	    }
 	  t++;
 	}
       cout << "sec=" << sec << ", firing rate=" << float(N_firings)/N << "\n";
-      if (sec == 0){
+      //if (sec == 0){
       fs = fopen("spikes.dat","w");
       for (i=1;i<N_firings;i++){
 	if (firings[i][0] >=0){
@@ -278,7 +283,7 @@ int main(int argc, char *argv[]){
 	}
       }
       fclose(fs);
-      }
+      //}
       for (i=0;i<N;i++){		// prepare for the next sec
 	for (j=0;j<D+1;j++){
 	  LTP[i][j]=LTP[i][1000+j];
@@ -305,7 +310,7 @@ int main(int argc, char *argv[]){
 	  }
       }
       sec++;
-      if (sec == 60 && !fileInput){
+      if (sec == 60*60 && !fileInput){
 	done = true;
       }
     }
