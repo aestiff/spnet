@@ -2,5 +2,7 @@
 .project
 spnet
 spikes.dat
-data
+data/raw_*
+data/nn_feat_inp*.txt
+data/#*
 octave*
