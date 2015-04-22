@@ -144,7 +144,9 @@ int main(int argc, char *argv[]){
   bool fileInput = false;
   ifstream inputData;
   short step = 10;
+  int feat = 0;
   int inFeat = 0;
+  int maxSecs = 60;
   string inputLine;
   //int Nexc, Ninh;
 
@@ -153,7 +155,9 @@ int main(int argc, char *argv[]){
     ValueArg<string> inFile("i","input","name of file containing input values",false,"","string");
     //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
     //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
+    ValueArg<int> maxTime("M","max","maximum number of seconds to simulate",false,60,"integer");
     cmd.add(inFile);
+    cmd.add(maxTime);
     //cmd.add(excite);
     //cmd.add(inhibit);
     cmd.parse(argc, argv);
@@ -169,14 +173,21 @@ int main(int argc, char *argv[]){
 	pos = inputLine.find(' ');
 	tok = inputLine.substr(0,pos);
 	step = stoi(tok);
-	tok = inputLine.substr(pos,inputLine.length()-2);
+	inputLine.erase(0,pos+1);
+	pos = inputLine.find(' ');
+	tok = inputLine.substr(0,pos);
+	feat = stoi(tok);
+	cout << feat;
+	tok = inputLine.substr(pos, inputLine.length()-2);
 	inFeat = stoi(tok);
+	cout << inFeat;
 	//load first input line
 	getline(inputData, inputLine);
       } else {
 	cout << "Could not open file." << endl;
       }
     }
+    maxSecs = maxTime.getValue();
     //Nexc = excite.getValue();
     //Ninh = inhibit.getValue();
   } catch (ArgException &e){
@@ -189,6 +200,7 @@ int main(int argc, char *argv[]){
   initialize();	// assign connections, weights, etc.  
   short framesLeft = 0;
   float scale = 1.0;
+  float labelScale = 20.0;
   bool done = false;
   sec = 0;
   bool preDone = false;
@@ -210,14 +222,18 @@ int main(int argc, char *argv[]){
 	  } else {
 	    //TODO: test this
 	    int ii;
-	    for (ii=inFeat;ii<N;ii++){
+	    for (ii=feat;ii<N;ii++){
 	      I[ii] = 0.0;
 	    }
 	    if (framesLeft == 0){
 	      //parse input
 	      size_t pos = 0;
-	      for (ii=0;ii<inFeat;ii++){
-		I[ii] = stof(inputLine,&pos) * scale ;
+	      for (ii=0;ii<feat;ii++){
+		if (ii<inFeat){
+		  I[ii] = stof(inputLine,&pos) * scale ;
+		} else {
+		  I[ii] = stof(inputLine,&pos) * labelScale;
+		}
 		inputLine.erase(0,pos);
 	      }
 	      //load next line (or stop)
@@ -270,7 +286,7 @@ int main(int argc, char *argv[]){
 	      v[i]+=0.5*((0.04*v[i]+5)*v[i]+140-u[i]+I[i]); // time step is 0.5 ms
 	      u[i]+=a[i]*(0.2*v[i]-u[i]);
 	      LTP[i][t+D+1]=0.95*LTP[i][t+D];
-	      LTD[i]*=0.9;
+	      LTD[i]*=0.95;
 	    }
 	  t++;
 	}
@@ -310,9 +326,12 @@ int main(int argc, char *argv[]){
 	  }
       }
       sec++;
-      if (sec == 60*60 && !fileInput){
+      if (sec == maxSecs){
 	done = true;
       }
     }
+  if (inputData.is_open()){
+    inputData.close();
+  }
   return 0;
 }
