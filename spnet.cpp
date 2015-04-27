@@ -19,7 +19,7 @@ const   int		Ni = 200;		// inhibitory neurons
 const	int		N  = Ne+Ni;		// total number of neurons	
 const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
-float	sm = 20.0;		                // maximal synaptic strength		
+float	sm = 16.0;		                // maximal synaptic strength		
 int	post[N][M];				// indeces of postsynaptic neurons
 float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
 short	delays_length[N][D];	                // distribution of delays
@@ -143,11 +143,15 @@ int main(int argc, char *argv[]){
   FILE	*fs;
   bool fileInput = false;
   ifstream inputData;
+  ofstream labelData;
   short step = 10;
   int feat = 0;
   int inFeat = 0;
   int maxSecs = 60;
+  int trainSecs = 60;
+  int testSecs = 0;
   string inputLine;
+  string currentLine;
   //int Nexc, Ninh;
 
   try{
@@ -156,8 +160,12 @@ int main(int argc, char *argv[]){
     //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
     //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
     ValueArg<int> maxTime("M","max","maximum number of seconds to simulate",false,60,"integer");
+    ValueArg<int> trainTime("t","train","number of seconds in the training interval",false,60,"integer");
+    ValueArg<int> testTime("x","test","number of seconds in the testing interval",false,0,"integer");
     cmd.add(inFile);
     cmd.add(maxTime);
+    cmd.add(trainTime);
+    cmd.add(testTime);
     //cmd.add(excite);
     //cmd.add(inhibit);
     cmd.parse(argc, argv);
@@ -165,6 +173,7 @@ int main(int argc, char *argv[]){
     if (fileHandle != ""){
       fileInput = true;
       inputData.open(fileHandle);
+      labelData.open("labels.txt");
       if (inputData.is_open()){
 	getline(inputData, inputLine);
 	//TODO: make this suck less.
@@ -182,12 +191,15 @@ int main(int argc, char *argv[]){
 	inFeat = stoi(tok);
 	cout << inFeat;
 	//load first input line
+	getline(inputData, currentLine);
 	getline(inputData, inputLine);
       } else {
 	cout << "Could not open file." << endl;
       }
     }
     maxSecs = maxTime.getValue();
+    trainSecs = trainTime.getValue();
+    testSecs = testTime.getValue();
     //Nexc = excite.getValue();
     //Ninh = inhibit.getValue();
   } catch (ArgException &e){
@@ -198,17 +210,32 @@ int main(int argc, char *argv[]){
     
   
   initialize();	// assign connections, weights, etc.  
-  short framesLeft = 0;
+  short framesLeft = step - 1;
   float scale = 1.0;
-  float labelScale = 20.0;
+  float labelScale = 150.0;
+  float shift = 0.66;
   bool done = false;
   sec = 0;
   bool preDone = false;
+  bool test = false;
+  int lastLabel = feat;
+  const int numLabels = feat - inFeat;
+  int labelSpikes[numLabels];
+
+  
+  for (i=0;i<numLabels;i++){
+    labelSpikes[i] = 0;
+  }
   for (i=0;i<N;i++){
     I[i] = 0.0;	// reset the input
   }
   while (!done)		// different ways to be done
     {
+      if (sec % (trainSecs + testSecs) == 0){
+	test = false;
+      } else if (sec % (trainSecs + testSecs) - trainSecs == 0){
+	test = true;
+      }
       t = 0;
       while (t<1000 && !done)				// simulation of 1 sec
 	{
@@ -219,30 +246,51 @@ int main(int argc, char *argv[]){
 	    for (k=0;k<N/1000;k++){
 	      I[getrandom(N)]=20.0; // random thalamic input
 	    }
-	  } else {
-	    //TODO: test this
+	  } else { // file input
 	    int ii;
 	    for (ii=feat;ii<N;ii++){
 	      I[ii] = 0.0;
 	    }
-	    if (framesLeft == 0){
-	      //parse input
-	      size_t pos = 0;
-	      for (ii=0;ii<feat;ii++){
-		if (ii<inFeat){
-		  I[ii] = stof(inputLine,&pos) * scale ;
+	    //parse input
+	    size_t next = 0;
+	    size_t last = 0;
+	    for (ii=0;ii<feat;ii++){
+	      next = currentLine.find(" ",last);
+	      if (ii<inFeat){ //input neurons
+		I[ii] = stof(currentLine.substr(last,next-last)) * scale ;
+	      } else { //label neurons
+		if (test){
+		  int q = 0;
+		  I[ii] = 0.0;
+		  //check for active label
+		  //if same as last time, leave it, otherwise switch
+		  if (stof(currentLine.substr(last,next-last)) > 0.5 && ii != lastLabel){
+		    labelData << "sec= " << sec << ", Label=" << lastLabel - inFeat << ", [ ";
+		    for (q=0;q<numLabels;q++){
+		      labelData << labelSpikes[q] << " ";
+		    }
+		    labelData << "]" << endl;
+		    for (q=0;q<numLabels;q++){
+		      labelSpikes[q] = 0;
+		    }
+		    lastLabel = ii;
+		  }
 		} else {
-		  I[ii] = stof(inputLine,&pos) * labelScale;
+		  I[ii] = (stof(currentLine.substr(last,next-last)) - shift) * labelScale;
 		}
-		inputLine.erase(0,pos);
 	      }
+	      last = next + 1;
+	      //inputLine.erase(0,pos);
+	    }
+	    if (framesLeft == 0){
 	      //load next line (or stop)
+	      currentLine = inputLine;
       	      getline(inputData, inputLine);
 	      if (inputData.eof()){
 		preDone = true;
 	      }
 	      //reset framesLeft
-	      framesLeft = step;
+	      framesLeft = step -1;
 	    } else {
 	      framesLeft--;
 	      if (preDone && framesLeft == 0){
@@ -266,6 +314,9 @@ int main(int argc, char *argv[]){
 		if (N_firings == N_firings_max) {
 		  cout << "Too many spikes at t=" << t << " (ignoring all)" << endl;
 		  N_firings=1;
+		}
+		if (test && inFeat <= i && i < feat){
+		  labelSpikes[i-inFeat]++;
 		}
 	      }
 	  }
