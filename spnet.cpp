@@ -19,7 +19,7 @@ const   int		Ni = 200;		// inhibitory neurons
 const	int		N  = Ne+Ni;		// total number of neurons	
 const	int		M  = 100;		// the number of synapses per neuron 
 const	int		D  = 20;		// maximal axonal conduction delay
-float	sm = 16.0;		                // maximal synaptic strength		
+float	sm = 10.0;		                // maximal synaptic strength		
 int	post[N][M];				// indeces of postsynaptic neurons
 float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
 short	delays_length[N][D];	                // distribution of delays
@@ -211,7 +211,7 @@ int main(int argc, char *argv[]){
   
   initialize();	// assign connections, weights, etc.  
   short framesLeft = step - 1;
-  float scale = 1.0;
+  float scale = 0.50;
   float labelScale = 150.0;
   float shift = 0.66;
   bool done = false;
@@ -304,7 +304,7 @@ int main(int argc, char *argv[]){
 		v[i] = -65.0;	// voltage reset
 		u[i]+=d[i];	// recovery variable reset
 		LTP[i][t+D]= 0.1;		
-		LTD[i]=0.1;
+		LTD[i]=0.12;
 		for (j=0;j<N_pre[i];j++){
 		  *sd_pre[i][j]+=LTP[I_pre[i][j]][t+D-D_pre[i][j]-1];
 		  // this spike was after pre-synaptic spikes
