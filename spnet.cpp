@@ -264,91 +264,92 @@ void	polychronous(int nnum){
 	  }
 	}
       }
+    }
 		
-      if (N_fired>2*W){
-	  N_links=0;
-	  L_max=0;
-	  for (i=W;i<N_fired;i++){
-	    layer[i]=0;
-	    for (p=t_fired[i]; (p>t_fired[i]-latency) & (p>=0); p--){
-	      for (j=0;j<N_postspikes[p];j++){
-		if ((I_postspikes[p][j]==group[i]) & (J_postspikes[p][j]<Ne)) {
-		  for (k=0;k<i;k++){
-		    if ((group[k]==J_postspikes[p][j]) & (layer[k]+1>layer[i])){
-		      layer[i]=layer[k]+1;
-		    }
-		  }
-		  //{   
-		  links[N_links][0]=J_postspikes[p][j];
-		  links[N_links][1]=I_postspikes[p][j];
-		  links[N_links][2]=D_postspikes[p][j];
-		  links[N_links++][3]=layer[i];
-		  if (L_max < layer[i]){
-		    L_max = layer[i];
-		  }
-		  //}
+    if (N_fired>2*W){
+      N_links=0;
+      L_max=0;
+      for (i=W;i<N_fired;i++){
+	layer[i]=0;
+	for (p=t_fired[i]; (p>t_fired[i]-latency) & (p>=0); p--){
+	  for (j=0;j<N_postspikes[p];j++){
+	    if ((I_postspikes[p][j]==group[i]) & (J_postspikes[p][j]<Ne)) {
+	      for (k=0;k<i;k++){
+		if ((group[k]==J_postspikes[p][j]) & (layer[k]+1>layer[i])){
+		  layer[i]=layer[k]+1;
 		}
 	      }
-	    }
-	  }
-										 
-	  discard = 0;
-	  for (i=0;i<W;i++) {
-	    used[i]=0;
-	    for (j=0;j<N_links;j++){
-	      if ((links[j][0] == group[i]) & (links[j][1] < Ne)){
-		used[i]++;
+	      //{   
+	      links[N_links][0]=J_postspikes[p][j];
+	      links[N_links][1]=I_postspikes[p][j];
+	      links[N_links][2]=D_postspikes[p][j];
+	      links[N_links++][3]=layer[i];
+	      if (L_max < layer[i]){
+		L_max = layer[i];
 	      }
-	    }
-	    if (used[i] == 1) {
-	      discard = 1;
+	      //}
 	    }
 	  }
-
-	  //if ((discard == 0) & (t_fired[N_fired-1] > min_group_time) )  // (L_max >= min_group_path))
-	  if ((discard == 0) & (L_max >= min_group_path)) {
-
-	    for (i=0;i<W;i++) {
-	      gr3[i]=group[i];
-	      tf3[i]=t_fired[i];
-	    } //???
-
-	    N_polychronous++;
-	    cout << "\ni= " << nnum
-		 << ", N_polychronous= " << N_polychronous
-		 << ", N_fired = " << N_fired
-		 << ", L_max = " << L_max
-		 << ", T=" << t_fired[N_fired-1];
-	    
-	    //fprintf(fpoly, " %d  %d,       ", N_fired, L_max);
-	    //for (i=0; i<N_fired; i++)
-	    //fprintf(fpoly, " %d %d, ", group[i], t_fired[i]);
-	    //fprintf(fpoly, "        ");
-	    //for (j=0;j<N_links;j++){
-	    //   fprintf(fpoly, " %d %d %d %d,  ", links[j][0], links[j][1], links[j][2], links[j][3]);
-	    //}
-	    //fprintf(fpoly, "\n");
+	}
+      }
+										 
+      discard = 0;
+      for (i=0;i<W;i++) {
+	used[i]=0;
+	for (j=0;j<N_links;j++){
+	  if ((links[j][0] == group[i]) & (links[j][1] < Ne)){
+	    used[i]++;
 	  }
+	}
+	if (used[i] == 1) {
+	  discard = 1;
+	}
       }
 
-      for (dd=Dmax;dd<t_last;dd++) {
+      //if ((discard == 0) & (t_fired[N_fired-1] > min_group_time) )  // (L_max >= min_group_path))
+      if ((discard == 0) & (L_max >= min_group_path)) {
+
+	for (i=0;i<W;i++) {
+	  gr3[i]=group[i];
+	  tf3[i]=t_fired[i];
+	} //???
+
+	N_polychronous++;
+	cout << "\ni= " << nnum
+	     << ", N_polychronous= " << N_polychronous
+	     << ", N_fired = " << N_fired
+	     << ", L_max = " << L_max
+	     << ", T=" << t_fired[N_fired-1];
+	    
+	fprintf(fpoly, " %d  %d,       ", N_fired, L_max);
+	for (i=0; i<N_fired; i++){
+	  fprintf(fpoly, " %d %d, ", group[i], t_fired[i]);
+	}
+	fprintf(fpoly, "        ");
+	for (j=0;j<N_links;j++){
+	  fprintf(fpoly, " %d %d %d %d,  ", links[j][0], links[j][1], links[j][2], links[j][3]);
+	}
+	fprintf(fpoly, "\n");
+      }
+    }
+
+    for (dd=Dmax;dd<t_last;dd++) {
+      N_postspikes[dd]=0;
+    }
+    if (t_last == polylenmax-D) {
+      for (dd=t_last;dd<polylenmax;dd++) {
 	N_postspikes[dd]=0;
       }
-      if (t_last == polylenmax-D) {
-	for (dd=t_last;dd<polylenmax;dd++) {
-	  N_postspikes[dd]=0;
-	}
+    }
+    i=1;
+    while (++npre[W-i] > N_my_pre-i){
+      if (++i > W){
+	return;
       }
-      i=1;
-      while (++npre[W-i] > N_my_pre-i){
-	if (++i > W){
-	  return;
-	}
-      }
-      while (i>1) {
-	npre[W-i+1]=npre[W-i]+1; i--;
-      }
-    }	
+    }
+    while (i>1) {
+      npre[W-i+1]=npre[W-i]+1; i--;
+    }
   }
 }  
 
@@ -358,7 +359,7 @@ void	all_polychronous()
 {
   int	i;
   N_polychronous=0;
-  fpoly = fopen("..//polyall.dat","w"); //necessary??
+  fpoly = fopen(".//polyall.dat","w"); //necessary??
   for (i=0;i<polylenmax;i++) N_postspikes[i]=0;
   
   for (i=0;i<Ne;i++) polychronous(i);
@@ -444,8 +445,8 @@ int main(int argc, char *argv[]){
   
   initialize();	// assign connections, weights, etc.  
   short framesLeft = step - 1;
-  float scale = 0.50;
-  float labelScale = 150.0;
+  float scale = 0.5;
+  float labelScale = 60.0;
   float shift = 0.66;
   bool done = false;
   sec = 0;
@@ -468,6 +469,7 @@ int main(int argc, char *argv[]){
 	test = false;
       } else if (sec % (trainSecs + testSecs) - trainSecs == 0){
 	test = true;
+	all_polychronous();
       }
       t = 0;
       while (t<1000 && !done)				// simulation of 1 sec
