@@ -14,30 +14,64 @@
 using namespace std;
 using namespace TCLAP;
 
-const   int		Ne = 800;		// excitatory neurons			
-const   int		Ni = 200;		// inhibitory neurons				 
-const	int		N  = Ne+Ni;		// total number of neurons	
-const	int		M  = 100;		// the number of synapses per neuron 
-const	int		D  = 20;		// maximal axonal conduction delay
-float	sm = 10.0;		                // maximal synaptic strength		
-int	post[N][M];				// indeces of postsynaptic neurons
-float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
-short	delays_length[N][D];	                // distribution of delays
-short	delays[N][D][M];		        // arrangement of delays   
-int	N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
-float	*s_pre[N][3*M], *sd_pre[N][3*M];	// presynaptic weights
-float	LTP[N][1001+D], LTD[N];	                // STDP functions 
-float	a[N], d[N];				// neuronal dynamics parameters
-float	v[N], u[N];				// activity variables
-int	N_firings;				// the number of fired neurons 
-const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
-int	firings[N_firings_max][2];              // indeces and timings of spikes
-double	C_max=10;		
-const	int	W=3;	                        // initial width of polychronous groups
-int     min_group_path = 7;		        // minimal length of a group
-int	min_group_time = 40;	                // minimal duration of a group (ms)
+class SpikingNetwork {
 
-void initialize()
+private:
+	static const   int		Ne = 800;		// excitatory neurons			
+	static const   int		Ni = 200;		// inhibitory neurons				 
+	static const	int		N  = Ne+Ni;		// total number of neurons	
+	static const	int		M  = 100;		// the number of synapses per neuron 
+	static const	int		D  = 20;		// maximal axonal conduction delay
+	float	sm = 10.0;		                // maximal synaptic strength		
+	int	post[N][M];				// indeces of postsynaptic neurons
+	float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
+	short	delays_length[N][D];	                // distribution of delays
+	short	delays[N][D][M];		        // arrangement of delays   
+	int	N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
+	float	*s_pre[N][3*M], *sd_pre[N][3*M];	// presynaptic weights
+	float	LTP[N][1001+D], LTD[N];	                // STDP functions 
+	float	a[N], d[N];				// neuronal dynamics parameters
+	float	v[N], u[N];				// activity variables
+	int	N_firings;				// the number of fired neurons 
+	static const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
+	int	firings[N_firings_max][2];              // indeces and timings of spikes
+	double	C_max=10;		
+	static const	int	W=3;	                        // initial width of polychronous groups
+	int     min_group_path = 7;		        // minimal length of a group
+	int	min_group_time = 40;	                // minimal duration of a group (ms)
+
+	static const	int	latency = D; // maximum latency 
+	//--------------------------------------------------------------
+	int			N_polychronous;
+
+
+	double		C_rel = 0.95*C_max;
+	static const int	polylenmax = N;
+	int			N_postspikes[polylenmax], I_postspikes[polylenmax][N], J_postspikes[polylenmax][N], D_postspikes[polylenmax][N], L_postspikes[polylenmax][N];
+	double		C_postspikes[polylenmax][N];
+	int			N_links, links[2*W*polylenmax][4];
+	int			group[polylenmax], t_fired[polylenmax], layer[polylenmax];
+	int			gr3[W], tf3[W];
+	int			I_my_pre[3*M], D_my_pre[3*M], N_my_pre;
+	int			N_fired;
+
+
+	FILE		*fpoly;
+
+	void initialize();
+
+public:
+	SpikingNetwork();
+	void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle);
+	void polychronous(int nnum);
+	void all_polychronous();
+};
+
+SpikingNetwork::SpikingNetwork(void){
+	initialize();
+}
+
+void SpikingNetwork::initialize()
 {
   //  Ne = Nexc;
   //  Ni = Ninh;
@@ -142,27 +176,10 @@ void initialize()
   firings[0][1]=0;	// index of the dummy spike  
 }
 
-const	int	latency = D; // maximum latency 
-//--------------------------------------------------------------
-int			N_polychronous;
-
-
-double		C_rel = 0.95*C_max;
-const int	polylenmax = N;
-int			N_postspikes[polylenmax], I_postspikes[polylenmax][N], J_postspikes[polylenmax][N], D_postspikes[polylenmax][N], L_postspikes[polylenmax][N];
-double		C_postspikes[polylenmax][N];
-int			N_links, links[2*W*polylenmax][4];
-int			group[polylenmax], t_fired[polylenmax], layer[polylenmax];
-int			gr3[W], tf3[W];
-int			I_my_pre[3*M], D_my_pre[3*M], N_my_pre;
-int			N_fired;
-
-
-FILE		*fpoly;
 
 
 //--------------------------------------------------------------
-void	polychronous(int nnum){
+void	SpikingNetwork::polychronous(int nnum){
   int	i,j, t, p, k;
   int npre[W];
   int dd;
@@ -355,7 +372,7 @@ void	polychronous(int nnum){
 
  
 //--------------------------------------------------------------
-void	all_polychronous()
+void	SpikingNetwork::all_polychronous()
 {
   int	i;
   N_polychronous=0;
@@ -368,43 +385,28 @@ void	all_polychronous()
   fclose(fpoly);
 }
 
-
-
-
-int main(int argc, char *argv[]){
+void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle){
+  short step = 10;
+  short framesLeft = step - 1;
+  float scale = 0.5;
+  float labelScale = 60.0;
+  float shift = 0.66;
+  bool done = false;
+  bool preDone = false;
+  bool test = false;
   int		i, j, k, sec, t;
   float	I[N];
-  FILE	*fs;
   bool fileInput = false;
   ifstream inputData;
   ofstream labelData;
-  short step = 10;
-  int feat = 0;
-  int inFeat = 0;
-  int maxSecs = 60;
-  int trainSecs = 60;
-  int testSecs = 0;
   string inputLine;
   string currentLine;
-  //int Nexc, Ninh;
+  int feat = 0;
+  int inFeat = 0;
+  FILE	*fs;
+  sec = 0;
 
-  try{
-    CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
-    ValueArg<string> inFile("i","input","name of file containing input values",false,"","string");
-    //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
-    //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
-    ValueArg<int> maxTime("M","max","maximum number of seconds to simulate",false,60,"integer");
-    ValueArg<int> trainTime("t","train","number of seconds in the training interval",false,60,"integer");
-    ValueArg<int> testTime("x","test","number of seconds in the testing interval",false,0,"integer");
-    cmd.add(inFile);
-    cmd.add(maxTime);
-    cmd.add(trainTime);
-    cmd.add(testTime);
-    //cmd.add(excite);
-    //cmd.add(inhibit);
-    cmd.parse(argc, argv);
-    string fileHandle = inFile.getValue();
-    if (fileHandle != ""){
+      if (fileHandle != ""){
       fileInput = true;
       inputData.open(fileHandle);
       labelData.open("labels.txt");
@@ -431,27 +433,6 @@ int main(int argc, char *argv[]){
 	cout << "Could not open file." << endl;
       }
     }
-    maxSecs = maxTime.getValue();
-    trainSecs = trainTime.getValue();
-    testSecs = testTime.getValue();
-    //Nexc = excite.getValue();
-    //Ninh = inhibit.getValue();
-  } catch (ArgException &e){
-    //do stuff
-    cerr << e.what();
-    return 1;
-  }
-    
-  
-  initialize();	// assign connections, weights, etc.  
-  short framesLeft = step - 1;
-  float scale = 0.5;
-  float labelScale = 60.0;
-  float shift = 0.66;
-  bool done = false;
-  sec = 0;
-  bool preDone = false;
-  bool test = false;
   int lastLabel = feat;
   const int numLabels = feat - inFeat;
   int labelSpikes[numLabels];
@@ -619,5 +600,46 @@ int main(int argc, char *argv[]){
   if (inputData.is_open()){
     inputData.close();
   }
+
+}
+
+
+
+int main(int argc, char *argv[]){
+  int maxSecs = 60;
+  int trainSecs = 60;
+  int testSecs = 0;
+  //int Nexc, Ninh;
+
+  try{
+    CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
+    ValueArg<string> inFile("i","input","name of file containing input values",false,"","string");
+    //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
+    //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
+    ValueArg<int> maxTime("M","max","maximum number of seconds to simulate",false,60,"integer");
+    ValueArg<int> trainTime("t","train","number of seconds in the training interval",false,60,"integer");
+    ValueArg<int> testTime("x","test","number of seconds in the testing interval",false,0,"integer");
+    cmd.add(inFile);
+    cmd.add(maxTime);
+    cmd.add(trainTime);
+    cmd.add(testTime);
+    //cmd.add(excite);
+    //cmd.add(inhibit);
+    cmd.parse(argc, argv);
+    string fileHandle = inFile.getValue();
+    maxSecs = maxTime.getValue();
+    trainSecs = trainTime.getValue();
+    testSecs = testTime.getValue();
+    //Nexc = excite.getValue();
+    //Ninh = inhibit.getValue();
+  SpikingNetwork net;	// assign connections, weights, etc.  
+  net.simulate(maxSecs, trainSecs, testSecs, fileHandle);
+  } catch (ArgException &e){
+    //do stuff
+    cerr << e.what();
+    return 1;
+  }
+    
+  
   return 0;
 }
