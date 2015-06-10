@@ -22,7 +22,7 @@ private:
 	static const	int		N  = Ne+Ni;		// total number of neurons	
 	static const	int		M  = 100;		// the number of synapses per neuron 
 	static const	int		D  = 20;		// maximal axonal conduction delay
-	float	sm = 10.0;		                // maximal synaptic strength		
+	float	sm;		                // maximal synaptic strength		
 	int	post[N][M];				// indeces of postsynaptic neurons
 	float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
 	short	delays_length[N][D];	                // distribution of delays
@@ -35,47 +35,29 @@ private:
 	int	N_firings;				// the number of fired neurons 
 	static const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
 	int	firings[N_firings_max][2];              // indeces and timings of spikes
-	double	C_max=10;		
-	static const	int	W=3;	                        // initial width of polychronous groups
-	int     min_group_path = 7;		        // minimal length of a group
-	int	min_group_time = 40;	                // minimal duration of a group (ms)
+//	double	C_max=10;		
+//	static const	int	W=3;	                        // initial width of polychronous groups
+//	int     min_group_path = 7;		        // minimal length of a group
+//	int	min_group_time = 40;	                // minimal duration of a group (ms)
 
-	static const	int	latency = D; // maximum latency 
+//	static const	int	latency = D; // maximum latency 
 	//--------------------------------------------------------------
-	int			N_polychronous;
+//	static const int	polylenmax = N;
 
 
-	double		C_rel = 0.95*C_max;
-	static const int	polylenmax = N;
-	int			N_postspikes[polylenmax], I_postspikes[polylenmax][N], J_postspikes[polylenmax][N], D_postspikes[polylenmax][N], L_postspikes[polylenmax][N];
-	double		C_postspikes[polylenmax][N];
-	int			N_links, links[2*W*polylenmax][4];
-	int			group[polylenmax], t_fired[polylenmax], layer[polylenmax];
-	int			gr3[W], tf3[W];
-	int			I_my_pre[3*M], D_my_pre[3*M], N_my_pre;
-	int			N_fired;
-
-
-	FILE		*fpoly;
-
-	void initialize();
 
 public:
 	SpikingNetwork();
 	void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle);
-	void polychronous(int nnum);
-	void all_polychronous();
+//	void polychronous(int nnum);
+//	void all_polychronous();
 };
 
 SpikingNetwork::SpikingNetwork(void){
-	initialize();
-}
-
-void SpikingNetwork::initialize()
-{
   //  Ne = Nexc;
   //  Ni = Ninh;
   int i,j,k,jj,dd, exists, r;
+  sm = 10.0;
   for (i=0;i<Ne;i++){
     a[i]=0.02;// RS type
   }
@@ -174,11 +156,12 @@ void SpikingNetwork::initialize()
   N_firings=1;		// spike timings
   firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
   firings[0][1]=0;	// index of the dummy spike  
+
 }
 
 
 
-//--------------------------------------------------------------
+/*--------------------------------------------------------------
 void	SpikingNetwork::polychronous(int nnum){
   int	i,j, t, p, k;
   int npre[W];
@@ -186,6 +169,18 @@ void	SpikingNetwork::polychronous(int nnum){
   int	t_last, timing;
   int	Dmax, L_max; 
   int	used[W], discard;
+	int			N_polychronous;
+	int			N_postspikes[polylenmax], I_postspikes[polylenmax][N], J_postspikes[polylenmax][N], D_postspikes[polylenmax][N], L_postspikes[polylenmax][N];
+	double		C_postspikes[polylenmax][N];
+	int			N_links, links[2*W*polylenmax][4];
+	int			group[polylenmax], t_fired[polylenmax], layer[polylenmax];
+	int			gr3[W], tf3[W];
+	int			I_my_pre[3*M], D_my_pre[3*M], N_my_pre;
+	int			N_fired;
+	FILE		*fpoly;
+
+
+	double		C_rel = 0.95*C_max;
   
   double v[N],u[N],I[N];
   
@@ -382,8 +377,9 @@ void	SpikingNetwork::all_polychronous()
   for (i=0;i<Ne;i++) polychronous(i);
   
   cout << "\nN_polychronous=" << N_polychronous << "\n";
-  fclose(fpoly);
+  fclose(fpoly); 
 }
+*/
 
 void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle){
   short step = 10;
@@ -450,7 +446,7 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
 	test = false;
       } else if (sec % (trainSecs + testSecs) - trainSecs == 0){
 	test = true;
-	all_polychronous();
+	//all_polychronous();
       }
       t = 0;
       while (t<1000 && !done)				// simulation of 1 sec
@@ -610,6 +606,7 @@ int main(int argc, char *argv[]){
   int trainSecs = 60;
   int testSecs = 0;
   //int Nexc, Ninh;
+  SpikingNetwork* net = new SpikingNetwork();	// assign connections, weights, etc.  
 
   try{
     CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
@@ -632,8 +629,7 @@ int main(int argc, char *argv[]){
     testSecs = testTime.getValue();
     //Nexc = excite.getValue();
     //Ninh = inhibit.getValue();
-  SpikingNetwork net;	// assign connections, weights, etc.  
-  net.simulate(maxSecs, trainSecs, testSecs, fileHandle);
+	net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
   } catch (ArgException &e){
     //do stuff
     cerr << e.what();
