@@ -17,24 +17,21 @@ using namespace TCLAP;
 class SpikingNetwork {
 
 private:
-	static const   int		Ne = 800;		// excitatory neurons			
-	static const   int		Ni = 200;		// inhibitory neurons				 
-	static const	int		N  = Ne+Ni;		// total number of neurons	
-	static const	int		M  = 100;		// the number of synapses per neuron 
-	static const	int		D  = 20;		// maximal axonal conduction delay
+	int		Ne;		// excitatory neurons			
+	int		Ni;		// inhibitory neurons				 
+	int		N;		// total number of neurons	
+	int		M;		// the number of synapses per neuron 
+	int		D;		// maximal axonal conduction delay
 	float	sm;		                // maximal synaptic strength		
-	int	post[N][M];				// indeces of postsynaptic neurons
-	float	s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
-	short	delays_length[N][D];	                // distribution of delays
-	short	delays[N][D][M];		        // arrangement of delays   
-	int	N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
-	float	*s_pre[N][3*M], *sd_pre[N][3*M];	// presynaptic weights
-	float	LTP[N][1001+D], LTD[N];	                // STDP functions 
-	float	a[N], d[N];				// neuronal dynamics parameters
-	float	v[N], u[N];				// activity variables
-	int	N_firings;				// the number of fired neurons 
-	static const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
-	int	firings[N_firings_max][2];              // indeces and timings of spikes
+	int		*post;					// post[N][M];				// indeces of postsynaptic neurons
+	float   *s, *sd;	//s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
+	short	*delays_length; //[N][D];	                // distribution of delays
+	short	*delays; //[N][D][M];		        // arrangement of delays   
+	int		*N_pre, *I_pre, *D_pre; //N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
+	float	**s_pre, **sd_pre; // [N][3*M];	// presynaptic weights
+	float	*LTP, *LTD; // LTP[N][1001+D], LTD[N];	                // STDP functions 
+	float	*a, *d;	//[N]			// neuronal dynamics parameters
+	float	*v, *u; //[N]				// activity variables
 //	double	C_max=10;		
 //	static const	int	W=3;	                        // initial width of polychronous groups
 //	int     min_group_path = 7;		        // minimal length of a group
@@ -44,20 +41,36 @@ private:
 	//--------------------------------------------------------------
 //	static const int	polylenmax = N;
 
+//	void init(int Ne, int Ni, int M, int D);
 
 
 public:
-	SpikingNetwork();
+	SpikingNetwork(int Ne, int Ni, int M, int D);
 	void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle);
 //	void polychronous(int nnum);
 //	void all_polychronous();
 };
 
-SpikingNetwork::SpikingNetwork(void){
-  //  Ne = Nexc;
-  //  Ni = Ninh;
+SpikingNetwork::SpikingNetwork(int Ne, int Ni, int M, int D):Ne(Ne),Ni(Ni),N(Ne+Ni),M(M),D(D){
   int i,j,k,jj,dd, exists, r;
   sm = 10.0;
+  post = new int[N*M];
+  s = new float[N*M];
+  sd = new float[N*M];
+  delays_length = new short[N*D];
+  delays = new short[N*D*M];
+  N_pre = new int[N];
+  I_pre = new int[N*3*M];
+  D_pre = new int[N*3*M];
+  s_pre = new float*[N*3*M];
+  sd_pre = new float*[N*3*M];
+  LTP = new float[N*(1001+D)];
+  LTD = new float[N];
+  a = new float[N];
+  d = new float[N];
+  v = new float[N];
+  u = new float[N];
+   
   for (i=0;i<Ne;i++){
     a[i]=0.02;// RS type
   }
@@ -78,24 +91,24 @@ SpikingNetwork::SpikingNetwork(void){
 	  if (i<Ne) r = getrandom(N);
 	  else	  r = getrandom(Ne);// inh -> exc only
 	  if (r==i) exists=1;				      	// no self-synapses 
-	  for (k=0;k<j;k++) if (post[i][k]==r) exists = 1;	// synapse already exists  
+	  for (k=0;k<j;k++) if (post[i*M+k]==r) exists = 1;	// synapse already exists  
 	}while (exists == 1);
-	post[i][j]=r;
+	post[i*M+j]=r;
       }
   }
   for (i=0;i<Ne;i++){
     for (j=0;j<M;j++){
-      s[i][j]=6.0; // initial exc. synaptic weights
+      s[i*M+j]=6.0; // initial exc. synaptic weights
     }
   }
   for (i=Ne;i<N;i++){
     for (j=0;j<M;j++){
-      s[i][j]=-5.0; // inhibitory synaptic weights
+      s[i*M+j]=-5.0; // inhibitory synaptic weights
     }
   }
   for (i=0;i<N;i++){
     for (j=0;j<M;j++){
-      sd[i][j]=0.0; // synaptic derivatives 
+      sd[i*M+j]=0.0; // synaptic derivatives 
     }
   }
   for (i=0;i<N;i++)
@@ -104,20 +117,20 @@ SpikingNetwork::SpikingNetwork(void){
       if (i<Ne)
 	{
 	  for (j=0;j<D;j++) 
-	    {	delays_length[i][j]=M/D;	// uniform distribution of exc. synaptic delays
-	      for (k=0;k<delays_length[i][j];k++){
-		delays[i][j][k]=ind++;
+	    {	delays_length[i*D+j]=M/D;	// uniform distribution of exc. synaptic delays
+	      for (k=0;k<delays_length[i*D+j];k++){
+		delays[i*D*M+j*M+k]=ind++;
 	      }
 	    }
 	}
       else
 	{
 	  for (j=0;j<D;j++){
-	    delays_length[i][j]=0;
+	    delays_length[i*D+j]=0;
 	  }
-	  delays_length[i][0]=M;			// all inhibitory delays are 1 ms
-	  for (k=0;k<delays_length[i][0];k++){
-	    delays[i][0][k]=ind++;
+	  delays_length[i*D+0]=M;			// all inhibitory delays are 1 ms
+	  for (k=0;k<delays_length[i*D+0];k++){
+	    delays[i*D*M+0*M+k]=ind++;
 	  }
 	}
     }
@@ -127,13 +140,13 @@ SpikingNetwork::SpikingNetwork(void){
       N_pre[i]=0;
       for (j=0;j<Ne;j++){
 	for (k=0;k<M;k++){
-	  if (post[j][k] == i){		// find all presynaptic neurons 
-	    I_pre[i][N_pre[i]]=j;	// add this neuron to the list
+	  if (post[j*M+k] == i){		// find all presynaptic neurons 
+	    I_pre[i*3*M+N_pre[i]]=j;	// add this neuron to the list
 	    for (dd=0;dd<D;dd++)	// find the delay
-	      for (jj=0;jj<delays_length[j][dd];jj++)
-		if (post[j][delays[j][dd][jj]]==i) D_pre[i][N_pre[i]]=dd;
-	    s_pre[i][N_pre[i]]=&s[j][k];	// pointer to the synaptic weight	
-	    sd_pre[i][N_pre[i]++]=&sd[j][k];// pointer to the derivative
+	      for (jj=0;jj<delays_length[j*D+dd];jj++)
+		if (post[j*M+delays[j*D*M+dd*M+jj]]==i) D_pre[i*3*M+N_pre[i]]=dd;
+	    s_pre[i*3*M+N_pre[i]]=&s[j*M+k];	// pointer to the synaptic weight	
+	    sd_pre[i*3*M+N_pre[i]++]=&sd[j*M+k];// pointer to the derivative
 	  }
 	}
       }
@@ -141,7 +154,7 @@ SpikingNetwork::SpikingNetwork(void){
   
   for (i=0;i<N;i++){
     for (j=0;j<1+D;j++){
-      LTP[i][j]=0.0;
+      LTP[i*(1001+D)+j]=0.0;
     }
   }
   for (i=0;i<N;i++){
@@ -153,10 +166,6 @@ SpikingNetwork::SpikingNetwork(void){
   for (i=0;i<N;i++){
     u[i]=0.2*v[i];	// initial values for u
   }
-  N_firings=1;		// spike timings
-  firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
-  firings[0][1]=0;	// index of the dummy spike  
-
 }
 
 
@@ -401,6 +410,13 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
   int inFeat = 0;
   FILE	*fs;
   sec = 0;
+	int		N_firings;				// the number of fired neurons 
+	const   int         N_firings_max=100*N;	// upper limit on the number of fired neurons per sec
+	int		firings[N_firings_max][2];              // indeces and timings of spikes
+  N_firings=1;		// spike timings
+  firings[0][0]=-D;	// put a dummy spike at -D for simulation efficiency 
+  firings[0][1]=0;	// index of the dummy spike  
+
 
       if (fileHandle != ""){
       fileInput = true;
@@ -515,10 +531,10 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
 	      {
 		v[i] = -65.0;	// voltage reset
 		u[i]+=d[i];	// recovery variable reset
-		LTP[i][t+D]= 0.1;		
+		LTP[i*(1001+D)+(t+D)]= 0.1;		
 		LTD[i]=0.12;
 		for (j=0;j<N_pre[i];j++){
-		  *sd_pre[i][j]+=LTP[I_pre[i][j]][t+D-D_pre[i][j]-1];
+		  *sd_pre[i*3*M+j]+=LTP[I_pre[i*3*M+j]*(1001+D)+(t+D-D_pre[i*3*M+j]-1)];
 		  // this spike was after pre-synaptic spikes
 		}
 		firings[N_firings  ][0]=t;
@@ -535,12 +551,13 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
 	  k=N_firings;
 	  while (t-firings[--k][0] <D)
 	    {
-	      for (j=0; j< delays_length[firings[k][1]][t-firings[k][0]]; j++)
+	      for (j=0; j< delays_length[firings[k][1]*D+(t-firings[k][0])]; j++)
 		{
-		  i=post[firings[k][1]][delays[firings[k][1]][t-firings[k][0]][j]]; 
-		  I[i]+=s[firings[k][1]][delays[firings[k][1]][t-firings[k][0]][j]];
-		  if (firings[k][1] <Ne) // this spike is before postsynaptic spikes
-		    sd[firings[k][1]][delays[firings[k][1]][t-firings[k][0]][j]]-=LTD[i];
+		  i=post[firings[k][1]*M+delays[firings[k][1]*D*M+(t-firings[k][0])*M+j]]; 
+		  I[i]+=s[firings[k][1]*M+delays[firings[k][1]*D*M+(t-firings[k][0])*M+j]];
+//  *** is_excitatory *** ?
+		if (firings[k][1] <Ne) // this spike is before postsynaptic spikes
+		    sd[firings[k][1]*M+delays[firings[k][1]*D*M+(t-firings[k][0])*M+j]]-=LTD[i];
 		}
 	    }
 	  for (i=0;i<N;i++)
@@ -548,7 +565,7 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
 	      v[i]+=0.5*((0.04*v[i]+5)*v[i]+140-u[i]+I[i]); // for numerical stability
 	      v[i]+=0.5*((0.04*v[i]+5)*v[i]+140-u[i]+I[i]); // time step is 0.5 ms
 	      u[i]+=a[i]*(0.2*v[i]-u[i]);
-	      LTP[i][t+D+1]=0.95*LTP[i][t+D];
+	      LTP[i*(1001+D)+(t+D+1)]=0.95*LTP[i*(1001+D)+(t+D)];
 	      LTD[i]*=0.95;
 	    }
 	  t++;
@@ -565,7 +582,7 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
       //}
       for (i=0;i<N;i++){		// prepare for the next sec
 	for (j=0;j<D+1;j++){
-	  LTP[i][j]=LTP[i][1000+j];
+	  LTP[i*(1001+D)+j]=LTP[i*(1001+D)+(1000+j)];
 	}
       }
       k=N_firings-1;
@@ -582,10 +599,10 @@ void	SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs, string f
       for (i=0;i<Ne;i++){	// modify only exc connections
 	for (j=0;j<M;j++)
 	  {
-	    s[i][j]+=0.01+sd[i][j];
-	    sd[i][j]*=0.9;			
-	    if (s[i][j]>sm) s[i][j]=sm;
-	    if (s[i][j]<0) s[i][j]=0.0;
+	    s[i*M+j]+=0.01+sd[i*M+j];
+	    sd[i*M+j]*=0.9;			
+	    if (s[i*M+j]>sm) s[i*M+j]=sm;
+	    if (s[i*M+j]<0) s[i*M+j]=0.0;
 	  }
       }
       sec++;
@@ -606,7 +623,7 @@ int main(int argc, char *argv[]){
   int trainSecs = 60;
   int testSecs = 0;
   //int Nexc, Ninh;
-  SpikingNetwork* net = new SpikingNetwork();	// assign connections, weights, etc.  
+  SpikingNetwork* net = new SpikingNetwork(800,200,100,20);	// assign connections, weights, etc.  
 
   try{
     CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ',"0.1");
