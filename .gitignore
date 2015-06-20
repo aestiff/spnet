@@ -1,5 +1,7 @@
 *~
 .project
+.settings
+.cproject
 spnet
 *.dat
 data/raw_*
@@ -7,3 +9,4 @@ data/nn_feat_inp*.txt
 data/#*
 octave*
 *.txt
+/Default/
