@@ -34,7 +34,7 @@ private:
   float *LTP, *LTD; // LTP[N][1001+D], LTD[N];	                // STDP functions 
   int *count; //class instance counts [numClasses]
   int *unitClass; // [N] classIDs for each neuron
-  float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax;	//[numClasses] (neuronal dynamics parameters)
+  float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax, *caInact;	//[numClasses] (neuronal dynamics parameters)
   bool *plastic;
   float *A_plus, *A_minus, *tau_plus, *tau_minus; //[numClasses] class-level STDP params
   float *Cinv, *vrPlusVt, *kVrVt, *ab, *abVr, *LTPdecay, *LTDdecay;   // [numClasses] calculated coefficients
@@ -92,6 +92,7 @@ SpikingNetwork::SpikingNetwork() {
   c = new float[numClasses];
   d = new float[numClasses];
   umax = new float[numClasses];
+  caInact = new float[numClasses];
   A_plus = new float[numClasses];
   A_minus = new float[numClasses];
   tau_plus = new float[numClasses];
@@ -122,6 +123,7 @@ SpikingNetwork::SpikingNetwork() {
   c[0] = -50.0;
   d[0] = 100.0;
   umax[0] = 10000.0;
+  caInact[0] = -300.0;
   A_plus[0] = 0.10;
   A_minus[0] = 0.12;
   tau_plus[0] = 20.0;
@@ -141,6 +143,7 @@ SpikingNetwork::SpikingNetwork() {
   c[1] = -55.0;
   d[1] = 200.0;
   umax[1] = 10000.0;
+  caInact[1] = -300.0;
   A_plus[1] = 0.0;
   A_minus[1] = 0.0;
   tau_plus[1] = 1.0;
@@ -278,6 +281,7 @@ void SpikingNetwork::saveTo(string filename){
 	to_string(c[i]) + "," +
 	to_string(d[i]) + "," +
 	to_string(umax[i]) + "," +
+	to_string(caInact[i]) + "," +
 	to_string(A_plus[i]) + "," +
 	to_string(A_minus[i]) + "," +
 	to_string(tau_plus[i]) + "," +
@@ -345,6 +349,7 @@ SpikingNetwork::SpikingNetwork(string filename){
     c = new float[numClasses];
     d = new float[numClasses];
     umax = new float[numClasses];
+    caInact = new float[numClasses];
     A_plus = new float[numClasses];
     A_minus = new float[numClasses];
     tau_plus = new float[numClasses];
@@ -355,11 +360,11 @@ SpikingNetwork::SpikingNetwork(string filename){
     bool bput;
     for (i = 0; i < numClasses; i++){
       getline(infile, line);
-      for (j = 0; j < 17; j++){
+      for (j = 0; j < 18; j++){
 	next = line.find(",", last);
 	if (j == 0) {
 	  input = stoi(line.substr(last, next - last));
-	} else if (j < 16){
+	} else if (j < 17){
 	  flput = stof(line.substr(last, next - last));
 	} else {
 	  bput = (bool)stoul(line.substr(last, next - last));
@@ -402,18 +407,21 @@ SpikingNetwork::SpikingNetwork(string filename){
 	  umax[i] = flput;
 	  break;
 	case 12:
-	  A_plus[i] = flput;
+	  caInact[i] = flput;
 	  break;
 	case 13:
-	  A_minus[i] = flput;
+	  A_plus[i] = flput;
 	  break;
 	case 14:
-	  tau_plus[i] = flput;
+	  A_minus[i] = flput;
 	  break;
 	case 15:
-	  tau_minus[i] = flput;
+	  tau_plus[i] = flput;
 	  break;
 	case 16:
+	  tau_minus[i] = flput;
+	  break;
+	case 17:
 	  plastic[i] = bput;
 	  break;
 	}
@@ -955,13 +963,12 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 	  for (i = 0; i < N; i++) {
 	    // for numerical stability time step is 0.5 ms
-	    // TODO: bhyp
 	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
 						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
 	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
 						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
-	    
-	    u[i] += a[unitClass[i]] * (b[unitClass[i]] * (v[i] - vr[unitClass[i]]) - u[i]);
+	    u[i] += a[unitClass[i]] * (v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]]
+					        * (v[i] - vr[unitClass[i]]) - u[i]);
 	    LTP[i * (1001 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
 	      * LTP[i * (1001 + D) + (t + D)];
 	    LTD[i] *= LTDdecay[unitClass[i]];
