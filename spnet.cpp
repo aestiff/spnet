@@ -17,8 +17,8 @@ using namespace TCLAP;
 class SpikingNetwork {
 
 private:
-  int Ne;		// excitatory neurons			
-  int Ni;		// inhibitory neurons				 
+  //int Ne;		// excitatory neurons			
+  //int Ni;		// inhibitory neurons				 
   int N;		// total number of neurons	
   int M;		// the number of synapses per neuron 
   int D;		// maximal axonal conduction delay
@@ -34,9 +34,10 @@ private:
   float *LTP, *LTD; // LTP[N][1001+D], LTD[N];	                // STDP functions 
   int *count; //class instance counts [numClasses]
   int *unitClass; // [N] classIDs for each neuron
-  float  *C, *k, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax;	//[numClasses] (neuronal dynamics parameters)
-  //TODO: class-level maxLTP/maxLTD?
-  float *Cinv, *vrPlusVt, *kVrVt, *ab, *abVr;   // [numClasses] calculated coefficients
+  float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax;	//[numClasses] (neuronal dynamics parameters)
+  bool *plastic;
+  float *A_plus, *A_minus, *tau_plus, *tau_minus; //[numClasses] class-level STDP params
+  float *Cinv, *vrPlusVt, *kVrVt, *ab, *abVr, *LTPdecay, *LTDdecay;   // [numClasses] calculated coefficients
   float *v, *u; //[N]				// activity variables
   //	double	C_max=10;		
   //	static const	int	W=3;	                        // initial width of polychronous groups
@@ -81,7 +82,7 @@ SpikingNetwork::SpikingNetwork() {
 
   count = new int[numClasses];
   C = new float[numClasses];
-  k = new float[numClasses];
+  kdyn = new float[numClasses];
   vr = new float[numClasses];
   vt = new float[numClasses];
   peak = new float[numClasses];
@@ -91,20 +92,27 @@ SpikingNetwork::SpikingNetwork() {
   c = new float[numClasses];
   d = new float[numClasses];
   umax = new float[numClasses];
-
+  A_plus = new float[numClasses];
+  A_minus = new float[numClasses];
+  tau_plus = new float[numClasses];
+  tau_minus = new float[numClasses];
+  plastic = new bool[numClasses];  
+  
   Cinv = new float[numClasses];
   vrPlusVt = new float[numClasses];
   kVrVt = new float[numClasses];
   ab = new float[numClasses];
   abVr = new float[numClasses];
-
+  LTPdecay = new float[numClasses];
+  LTDdecay = new float[numClasses];
+    
   v = new float[N];
   u = new float[N];
 
   //RS neurons from Izhikevich 2007, "Dynamical Systems in Neuroscience", Chapter 8
   count[0] = 800;
   C[0] = 100.0;
-  k[0] = 0.7;
+  kdyn[0] = 0.7;
   vr[0] = -60.0;
   vt[0] = -40.0;
   peak[0] = 35.0;
@@ -114,11 +122,16 @@ SpikingNetwork::SpikingNetwork() {
   c[0] = -50.0;
   d[0] = 100.0;
   umax[0] = 10000.0;
+  A_plus[0] = 0.10;
+  A_minus[0] = 0.12;
+  tau_plus[0] = 20.0;
+  tau_minus[0] = 20.0;
+  plastic[0] = true;
 
   //FS (basket) neurons from Izhikevich 2008
   count[1] = 200;
   C[1] = 20.0;
-  k[1] = 1.0;
+  kdyn[1] = 1.0;
   vr[1] = -55;
   vt[1] = -40;
   peak[1] = 25.0;
@@ -128,7 +141,12 @@ SpikingNetwork::SpikingNetwork() {
   c[1] = -55.0;
   d[1] = 200.0;
   umax[1] = 10000.0;
-
+  A_plus[0] = 0.0;
+  A_minus[0] = 0.0;
+  tau_plus[0] = 1.0;
+  tau_minus[0] = 1.0;
+  plastic[0] = false;
+  
   for (i = 0; i < count[0]; i++) {
     unitClass[i] = 0;	// RS type 
   }
@@ -138,9 +156,11 @@ SpikingNetwork::SpikingNetwork() {
   for (i = 0; i < numClasses; i++){
     Cinv[i] = 1/C[i];
     vrPlusVt[i] = vr[i] + vt[i];
-    kVrVt[i] = k[i] * vr[i] * vt[i];
+    kVrVt[i] = kdyn[i] * vr[i] * vt[i];
     ab[i] = a[i] * b[i];
     abVr[i] = a[i] * b[i] * vr[i];
+    LTPdecay[i] = 1.0 - (1.0/tau_plus[i]);
+    LTDdecay[i] = 1.0 - (1.0/tau_minus[i]);
   }
   for (i = 0; i < N; i++) {
     for (j = 0; j < M; j++) {
@@ -149,7 +169,7 @@ SpikingNetwork::SpikingNetwork() {
 	if (i < count[0]) 
 	  r = getrandom(N);
 	else
-	  r = getrandom(Ne);		// inh -> exc only
+	  r = getrandom(count[0]);		// inh -> exc only
 	if (r == i)
 	  exists = 1;				      	// no self-synapses 
 	for (k = 0; k < j; k++)
@@ -196,7 +216,7 @@ SpikingNetwork::SpikingNetwork() {
 
   for (i = 0; i < N; i++) {
     N_pre[i] = 0;
-    for (j = 0; j < Ne; j++) {
+    for (j = 0; j < count[0]; j++) {
       for (k = 0; k < M; k++) {
 	if (post[j * M + k] == i) {		// find all presynaptic neurons 
 	  I_pre[i * 3 * M + N_pre[i]] = j;// add this neuron to the list
@@ -228,6 +248,7 @@ SpikingNetwork::SpikingNetwork() {
   }
 }
 
+//TODO: save added params
 void SpikingNetwork::saveTo(string filename){
   ofstream saveFile;
   saveFile.open(filename);
@@ -248,7 +269,7 @@ void SpikingNetwork::saveTo(string filename){
     for (i = 0; i < numClasses; i++){
       saveFile << to_string(count[i]) + "," +
 	to_string(C[i]) + "," +
-	to_string(k[i]) + "," +
+	to_string(kdyn[i]) + "," +
 	to_string(vr[i]) + "," +
 	to_string(vt[i]) + "," +
 	to_string(peak[i]) + "," +
@@ -276,6 +297,7 @@ void SpikingNetwork::saveTo(string filename){
   saveFile.close();
 }
 
+//TODO: initialize added params
 SpikingNetwork::SpikingNetwork(string filename){
   sm = 10.0;
   ifstream infile;
@@ -310,7 +332,7 @@ SpikingNetwork::SpikingNetwork(string filename){
     //get class-level params
     count = new int[numClasses];
     C = new float[numClasses];
-    k = new float[numClasses];
+    kdyn = new float[numClasses];
     vr = new float[numClasses];
     vt = new float[numClasses];
     peak = new float[numClasses];
@@ -334,7 +356,7 @@ SpikingNetwork::SpikingNetwork(string filename){
 	  C[i] = input;
 	  break;
 	case 2:
-	  k[i] = input;
+	  kdyn[i] = input;
 	  break;
 	case 3:
 	  vr[i] = input;
@@ -376,7 +398,7 @@ SpikingNetwork::SpikingNetwork(string filename){
     for (i = 0; i < numClasses; i++){
       Cinv[i] = 1/C[i];
       vrPlusVt[i] = vr[i] + vt[i];
-      kVrVt[i] = k[i] * vr[i] * vt[i];
+      kVrVt[i] = kdyn[i] * vr[i] * vt[i];
       ab[i] = a[i] * b[i];
       abVr[i] = a[i] * b[i] * vr[i];
     }
@@ -435,10 +457,13 @@ SpikingNetwork::SpikingNetwork(string filename){
 
     for (i = 0; i < N; i++) {
       N_pre[i] = 0;
-      for (j = 0; j < Ne; j++) {
+      // Note: synapses are not plastic from inh neurons in default net;
+      // in general, this is not the case, so we examine all presynaptic
+      // neurons here (use N instead of only count of exc neurons).
+      for (j = 0; j < N; j++) { 
 	for (k = 0; k < M; k++) {
 	  if (post[j * M + k] == i) {		// find all presynaptic neurons
-	    I_pre[i * 3 * M + N_pre[i]] = j;// add this neuron to the list
+	    I_pre[i * 3 * M + N_pre[i]] = j; // add this neuron to the list
 	    for (dd = 0; dd < D; dd++)	// find the delay
 	      for (jj = 0; jj < delays_length[j * D + dd]; jj++)
 		if (post[j * M + delays[j * D * M + dd * M + jj]]
@@ -838,15 +863,17 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      {
 		v[i] = c[unitClass[i]];	// voltage reset
 		u[i] += d[unitClass[i]];	// recovery variable reset
-		//TODO: add switch for LTP/LTD
-		LTP[i * (1001 + D) + (t + D)] = 0.1;
-		LTD[i] = 0.12;
+		LTP[i * (1001 + D) + (t + D)] = A_plus[unitClass[i]];
+		LTD[i] = A_minus[unitClass[i]];
 		for (j = 0; j < N_pre[i]; j++) {
 		  // this spike was after pre-synaptic spikes;
 		  // add to the weight of the synapse between this neuron and its
 		  // pre-synaptic neuron according to the LTP value for the presynaptic
 		  // neuron at the delay time in the past (this is why we need to store
 		  // values for all times).
+
+		  // generalization handled by setting LTP curve parameters on class-basis
+		  // (would a switch save computation?)
 		  *sd_pre[i * 3 * M + j] += LTP[I_pre[i * 3 * M + j]
 						* (1001 + D)
 						+ (t + D - D_pre[i * 3 * M + j] - 1)];
@@ -879,29 +906,28 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      I[i] += s[firings[k][1] * M
 			+ delays[firings[k][1] * D * M
 				 + (t - firings[k][0]) * M + j]];
-	      //  TODO: account for LTP/LTD switch
-	      if (firings[k][1] < Ne){
-		// this spike is after postsynaptic spikes (past spikes at neuron i)	
-		// LTD[i] spikes when neuron i spikes, then decays.
-		// depression is only affected by most recent spike
-		sd[firings[k][1] * M
-		   + delays[firings[k][1] * D * M
-			    + (t - firings[k][0]) * M + j]] -=
-		  LTD[i];
-	      }
+	      // this spike is after postsynaptic spikes (past spikes at neuron i)	
+	      // LTD[i] spikes when neuron i spikes, then decays.
+	      // depression is only affected by most recent spike
+	      // non-plastic synapses handled by parameters of LTD curve.
+	      sd[firings[k][1] * M
+		 + delays[firings[k][1] * D * M
+			  + (t - firings[k][0]) * M + j]] -=
+		LTD[i];
 	    }
 	  }
-	  //TODO: account for LTP/LTD switch
+
 	  for (i = 0; i < N; i++) {
 	    // for numerical stability time step is 0.5 ms
-	    v[i] += 0.5 * Cinv[unitClass[i]] * ((k[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
+	    // TODO: bhyp
+	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
 						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
-	    v[i] += 0.5 * Cinv[unitClass[i]] * ((k[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
+	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
 						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
 	    u[i] += a[unitClass[i]] * (b[unitClass[i]] * (v[i] - vr[unitClass[i]]) - u[i]);
-	    LTP[i * (1001 + D) + (t + D + 1)] = 0.95
+	    LTP[i * (1001 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
 	      * LTP[i * (1001 + D) + (t + D)];
-	    LTD[i] *= 0.95;
+	    LTD[i] *= LTDdecay[unitClass[i]];
 	  }
 	  t++;
 	}
@@ -937,14 +963,16 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       }
       N_firings = N_firings - k;
 
-      for (i = 0; i < Ne; i++) {	// modify only exc connections
-	for (j = 0; j < M; j++) {
-	  s[i * M + j] += 0.01 + sd[i * M + j]; //only place for weight modification
-	  sd[i * M + j] *= 0.9; // ??
-	  if (s[i * M + j] > sm)
-	    s[i * M + j] = sm;
-	  if (s[i * M + j] < 0)
-	    s[i * M + j] = 0.0;
+      for (i = 0; i < N; i++) {
+	if (plastic[unitClass[i]]){// modify only exc connections
+	  for (j = 0; j < M; j++) {
+	    s[i * M + j] += 0.01 + sd[i * M + j]; //only place for weight modification
+	    sd[i * M + j] *= 0.9; // ??
+	    if (s[i * M + j] > sm)
+	      s[i * M + j] = sm;
+	    if (s[i * M + j] < 0)
+	      s[i * M + j] = 0.0;
+	  }
 	}
       }
       sec++;
@@ -963,11 +991,7 @@ int main(int argc, char *argv[]) {
   int trainSecs = 60;
   int testSecs = 0;
   //int Nexc, Ninh;
-  SpikingNetwork* net = new SpikingNetwork();// assign connections, weights, etc.
-  //	net->saveTo("network.dat");
-  //	SpikingNetwork* net2 = new SpikingNetwork("network.dat");
-  //	net2->saveTo("network2.dat");
-
+  
   try {
     CmdLine cmd("Run a spiking network simulation under supplied parameters.",' ', "0.1");
     ValueArg < string
@@ -996,7 +1020,12 @@ int main(int argc, char *argv[]) {
     testSecs = testTime.getValue();
     //Nexc = excite.getValue();
     //Ninh = inhibit.getValue();
-    net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
+    SpikingNetwork* net = new SpikingNetwork(); // assign connections, weights, etc.
+    //	net->saveTo("network.dat");
+    //	SpikingNetwork* net2 = new SpikingNetwork("network.dat");
+    //	net2->saveTo("network2.dat");
+
+    //net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
