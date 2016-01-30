@@ -23,7 +23,7 @@ private:
   int M;		// the number of synapses per neuron 
   int D;		// maximal axonal conduction delay
   int numClasses;       // number of dynamical classes
-  float sm;		                // maximal synaptic strength		
+  //  float sm;		                // maximal synaptic strength		
   int *post;	// post[N][M];				// indeces of postsynaptic neurons
   float *s, *sd; //s[N][M], sd[N][M];		        // matrix of synaptic weights and their derivatives
   short *delays_length; //[N][D];	                // distribution of delays
@@ -36,7 +36,7 @@ private:
   int *unitClass; // [N] classIDs for each neuron
   float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax, *caInact;	//[numClasses] (neuronal dynamics parameters)
   bool *plastic;
-  float *A_plus, *A_minus, *tau_plus, *tau_minus; //[numClasses] class-level STDP params
+  float *A_plus, *A_minus, *tau_plus, *tau_minus, *max_weight; //[numClasses] class-level STDP params
   float *Cinv, *vrPlusVt, *kVrVt, *ab, *abVr, *LTPdecay, *LTDdecay;   // [numClasses] calculated coefficients
   float *v, *u; //[N]				// activity variables
   //	double	C_max=10;		
@@ -65,7 +65,6 @@ SpikingNetwork::SpikingNetwork() {
   M = 100;
   numClasses = 2;
   D = 20;
-  sm = 10.0;
   post = new int[N * M];
   s = new float[N * M];
   sd = new float[N * M];
@@ -98,6 +97,7 @@ SpikingNetwork::SpikingNetwork() {
   tau_plus = new float[numClasses];
   tau_minus = new float[numClasses];
   plastic = new bool[numClasses];  
+  max_weight = new float[numClasses];
   
   Cinv = new float[numClasses];
   vrPlusVt = new float[numClasses];
@@ -129,7 +129,8 @@ SpikingNetwork::SpikingNetwork() {
   tau_plus[0] = 20.0;
   tau_minus[0] = 20.0;
   plastic[0] = true;
-
+  max_weight[0] = 10.0;
+  
   //FS (basket) neurons from Izhikevich 2008
   count[1] = 200;
   C[1] = 20.0;
@@ -149,7 +150,8 @@ SpikingNetwork::SpikingNetwork() {
   tau_plus[1] = 1.0;
   tau_minus[1] = 1.0;
   plastic[1] = false;
-  
+  max_weight[1] = -5.0;
+
   for (i = 0; i < count[0]; i++) {
     unitClass[i] = 0;	// RS type 
   }
@@ -252,6 +254,7 @@ SpikingNetwork::SpikingNetwork() {
 }
 
 void SpikingNetwork::saveTo(string filename){
+  cout << "save to\n";
   ofstream saveFile;
   saveFile.open(filename);
   if(!saveFile.fail()){
@@ -286,7 +289,8 @@ void SpikingNetwork::saveTo(string filename){
 	to_string(A_minus[i]) + "," +
 	to_string(tau_plus[i]) + "," +
 	to_string(tau_minus[i]) + "," +
-	to_string((uint)plastic[i]) + "\n";
+	to_string((uint)plastic[i]) + "," +
+	to_string(max_weight[i]) + "\n";
     }
     //write neuron-level parameters
     for (i=0; i < N; i++){
@@ -306,10 +310,12 @@ void SpikingNetwork::saveTo(string filename){
 }
 
 SpikingNetwork::SpikingNetwork(string filename){
-  sm = 10.0;
+  //sm = 10.0;
+  cout << "file constructor\n";
   ifstream infile;
   infile.open(filename);
   if (!infile.fail()){
+    cout << "file opened\n";
     string line;
     getline(infile, line);
     size_t next = 0;
@@ -317,6 +323,7 @@ SpikingNetwork::SpikingNetwork(string filename){
     int i,j,k,jj,dd;
     int input;
     //get metaparams
+    cout << "get metaparams\n";
     for (i = 0; i < 4; i++){
       next = line.find(",", last);
       input = stoi(line.substr(last, next - last));
@@ -337,6 +344,7 @@ SpikingNetwork::SpikingNetwork(string filename){
       last = next + 1;
     }
     //get class-level params
+    cout << "get class params\n";
     count = new int[numClasses];
     C = new float[numClasses];
     kdyn = new float[numClasses];
@@ -355,19 +363,20 @@ SpikingNetwork::SpikingNetwork(string filename){
     tau_plus = new float[numClasses];
     tau_minus = new float[numClasses];
     plastic = new bool[numClasses];  
-  
+    max_weight = new float[numClasses];
+
     float flput;
     bool bput;
     for (i = 0; i < numClasses; i++){
       getline(infile, line);
-      for (j = 0; j < 18; j++){
+      for (j = 0; j < 19; j++){
 	next = line.find(",", last);
 	if (j == 0) {
 	  input = stoi(line.substr(last, next - last));
-	} else if (j < 17){
-	  flput = stof(line.substr(last, next - last));
-	} else {
+	} else if (j == 17){
 	  bput = (bool)stoul(line.substr(last, next - last));
+	} else {
+	  flput = stof(line.substr(last, next - last));
 	}  
 	switch(j){
 	case 0:
@@ -424,10 +433,14 @@ SpikingNetwork::SpikingNetwork(string filename){
 	case 17:
 	  plastic[i] = bput;
 	  break;
+	case 18:
+	  max_weight[i] = flput;
+	  break;
 	}
 	last = next + 1;
       }
     }
+    cout << "calculate coefficients\n";
     //calculate class-level dynamics coefficients
     Cinv = new float[numClasses];
     vrPlusVt = new float[numClasses];
@@ -446,6 +459,7 @@ SpikingNetwork::SpikingNetwork(string filename){
       LTPdecay[i] = 1.0 - (1.0/tau_plus[i]);
       LTDdecay[i] = 1.0 - (1.0/tau_minus[i]);
     }
+    cout << "parse neuron params\n";
     //parse neuron-level params (i.e. dynamics class ID)
     unitClass = new int[N];
     for (i = 0; i < N; i++){
@@ -458,9 +472,11 @@ SpikingNetwork::SpikingNetwork(string filename){
     delays_length = new short[N*D];
     delays = new short[N*D*M];
 
+    cout << "parse synapse params\n";
     //parse synapse-level params
     short d;
     for (i = 0; i < N; i++){
+      //cout << i << "\n";
       for (j=0; j < M; j++){
 	getline(infile, line, ';');
 	for (k = 0; k < 4; k++){
@@ -482,6 +498,7 @@ SpikingNetwork::SpikingNetwork(string filename){
 		     + delays_length[i * D + (d - 1)]] = j;
 	      delays_length[i * D + (d - 1)]++;
 	    } else {
+	      cout << d << "\n";
 	      exit(2);
 	    }
 	    break;
@@ -498,7 +515,7 @@ SpikingNetwork::SpikingNetwork(string filename){
     D_pre = new int[N * 3 * M];
     s_pre = new float*[N * 3 * M];
     sd_pre = new float*[N * 3 * M];
-
+    cout << "set up pointers\n";
     for (i = 0; i < N; i++) {
       N_pre[i] = 0;
       // Note: synapses are not plastic from inh neurons in default net;
@@ -541,6 +558,7 @@ SpikingNetwork::SpikingNetwork(string filename){
       u[i] = 0.2 * v[i];	// initial values for u
     }
   }
+  cout << "done\n";
 }
 /*--------------------------------------------------------------
   void	SpikingNetwork::polychronous(int nnum){
@@ -764,10 +782,11 @@ SpikingNetwork::SpikingNetwork(string filename){
 
 void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 			      string fileHandle) {
+  cout << "simulate\n";
   short step = 10;
   short framesLeft = step - 1;
-  float scale = 0.5;
-  float labelScale = 60.0;
+  float scale = 1.0;
+  float labelScale = 1.0;
   float shift = 0.66;
   bool done = false;
   bool preDone = false;
@@ -843,7 +862,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      I[i] = 0.0;	// reset the input
 	    }
 	    for (k = 0; k < N / 1000; k++) {
-	      I[getrandom(N)] = 20.0; // random thalamic input
+	      I[getrandom(N)] = 20.0 * scale; // random thalamic input
 	    }
 	  } else { // file input
 	    int ii;
@@ -963,11 +982,12 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 	  for (i = 0; i < N; i++) {
 	    // for numerical stability time step is 0.5 ms
-	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
-						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
-	    v[i] += 0.5 * Cinv[unitClass[i]] * ((kdyn[unitClass[i]] * v[i] - vrPlusVt[unitClass[i]])
-						* v[i] - kVrVt[unitClass[i]] - u[i] + I[i]);
-	    u[i] += a[unitClass[i]] * (v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]]
+	    // TODO: umax
+	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
+						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
+	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
+						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
+	    u[i] += a[unitClass[i]] * ((v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]])
 					        * (v[i] - vr[unitClass[i]]) - u[i]);
 	    LTP[i * (1001 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
 	      * LTP[i * (1001 + D) + (t + D)];
@@ -1012,10 +1032,15 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  for (j = 0; j < M; j++) {
 	    s[i * M + j] += 0.01 + sd[i * M + j]; //only place for weight modification
 	    sd[i * M + j] *= 0.9; // ??
-	    if (s[i * M + j] > sm)
-	      s[i * M + j] = sm;
-	    if (s[i * M + j] < 0)
+	    if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
+	      s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
+	    }
+	    if (max_weight[unitClass[i]] > 0 && s[i * M + j] < 0) {
 	      s[i * M + j] = 0.0;
+	    }
+	    if (max_weight[unitClass[i]] < 0 && s[i * M + j] > 0) {
+	      s[i * M + j] = 0.0;
+	    }
 	  }
 	}
       }
@@ -1041,8 +1066,9 @@ int main(int argc, char *argv[]) {
     ValueArg < string
 	       > inFile("i", "input", "name of file containing input values",
 			false, "", "string");
-    //ValueArg<int> excite("E","excite","number of excitatory neurons",false,800,"integer");
-    //ValueArg<int> inhibit("I","inhibit","number of inhibitory neurons",false,200,"integer");
+    ValueArg < string
+	       > netFile("N", "network", "name of file containing network configuration",
+			false, "", "string");
     ValueArg<int> maxTime("M", "max",
 			  "maximum number of seconds to simulate", false, 60, "integer");
     ValueArg<int> trainTime("t", "train",
@@ -1055,21 +1081,26 @@ int main(int argc, char *argv[]) {
     cmd.add(maxTime);
     cmd.add(trainTime);
     cmd.add(testTime);
-    //cmd.add(excite);
-    //cmd.add(inhibit);
+    cmd.add(netFile);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
+    string netFilename = netFile.getValue();
     maxSecs = maxTime.getValue();
     trainSecs = trainTime.getValue();
     testSecs = testTime.getValue();
-    //Nexc = excite.getValue();
-    //Ninh = inhibit.getValue();
-    SpikingNetwork* net = new SpikingNetwork(); // assign connections, weights, etc.
-    net->saveTo("network.dat");
-    SpikingNetwork* net2 = new SpikingNetwork("network.dat");
-    net2->saveTo("network2.dat");
+    SpikingNetwork* net;
+    // assign connections, weights, etc.
+    if (netFilename == ""){
+      net = new SpikingNetwork();
+    } else {
+      net = new SpikingNetwork(netFilename);
+    }
+    // tests of constructors and serializer
+    //net->saveTo("network-test.dat");
+    //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
+    //net2->saveTo("network2.dat");
 
-    //net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
+    net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
