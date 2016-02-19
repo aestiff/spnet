@@ -52,7 +52,7 @@ public:
   //SpikingNetwork(int Ne, int Ni, int M, int D);
   SpikingNetwork(string filename);
   SpikingNetwork();
-  void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle, float scale);
+  void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle, float scale, bool kaldiMode, int numFeats, int stepSize);
   void saveTo(string filename);
   //	void polychronous(int nnum);
   //	void all_polychronous();
@@ -780,14 +780,15 @@ SpikingNetwork::SpikingNetwork(string filename){
   }
 */
 
+// These params should probably be object properties or something
 void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
-			      string fileHandle, float scale) {
+			      string fileHandle, float scale, bool kaldiMode, int numFeats, int stepSize) {
   cout << "simulate\n";
   short step = 10;
   short framesLeft = step - 1;
   //float scale = 1.0;
-  float labelScale = 1.0;
-  float shift = 0.66;
+  //float labelScale = 1.0;
+  //float shift = 0.66;
   bool done = false;
   bool preDone = false;
   bool test = false;
@@ -795,11 +796,11 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   float I[N];
   bool fileInput = false;
   ifstream inputData;
-  ofstream labelData;
+  //ofstream labelData;
   string inputLine;
   string currentLine;
   int feat = 0;
-  int inFeat = 0;
+  //int inFeat = 0;
   FILE *fs;
   sec = 0;
   int N_firings;				// the number of fired neurons 
@@ -812,37 +813,47 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   if (fileHandle != "") {
     fileInput = true;
     inputData.open(fileHandle);
-    labelData.open("labels.txt");
+    //labelData.open("labels.txt");
     if (inputData.is_open()) {
-      getline(inputData, inputLine);
-      //TODO: make this suck less.
-      string tok;
-      size_t pos = 0;
-      pos = inputLine.find(' ');
-      tok = inputLine.substr(0, pos);
-      step = stoi(tok);
-      inputLine.erase(0, pos + 1);
-      pos = inputLine.find(' ');
-      tok = inputLine.substr(0, pos);
-      feat = stoi(tok);
-      cout << feat;
-      tok = inputLine.substr(pos, inputLine.length() - 2);
-      inFeat = stoi(tok);
-      cout << inFeat;
+      if (!kaldiMode){
+	getline(inputData, inputLine);
+	//TODO: make this suck less.
+	string tok;
+	size_t pos = 0;
+	pos = inputLine.find(' ');
+	tok = inputLine.substr(0, pos);
+	step = stoi(tok);
+	inputLine.erase(0, pos + 1);
+	pos = inputLine.find(' ');
+	tok = inputLine.substr(0, pos);
+	feat = stoi(tok);
+	cout << feat;
+	// removing notion of "labels"
+	//tok = inputLine.substr(pos, inputLine.length() - 2);
+	//inFeat = stoi(tok);
+	//cout << inFeat;
+      } else {
+	step = stepSize;
+	feat = numFeats;
+	//inFeat = numFeats;
+      }
       //load first input line
       getline(inputData, currentLine);
-      getline(inputData, inputLine);
+      getline(inputData, inputLine); //pre-load next line
     } else {
       cout << "Could not open file." << endl;
     }
   }
-  int lastLabel = feat;
-  const int numLabels = feat - inFeat;
-  int labelSpikes[numLabels];
+  // removing notion of "labels"
 
-  for (i = 0; i < numLabels; i++) {
-    labelSpikes[i] = 0;
-  }
+  //int lastLabel = feat;
+  //const int numLabels = feat - inFeat;
+  //int labelSpikes[numLabels];
+
+  //for (i = 0; i < numLabels; i++) {
+  //  labelSpikes[i] = 0;
+  //}
+
   for (i = 0; i < N; i++) {
     I[i] = 0.0;	// reset the input
   }
@@ -877,35 +888,35 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    size_t last = 0;
 	    for (ii = 0; ii < feat; ii++) {
 	      next = currentLine.find(" ", last);
-	      if (ii < inFeat) { //input neurons
+	      // removing notion of "labels"
+	      //if (ii < inFeat) { //input neurons
 		I[ii] = stof(currentLine.substr(last, next - last))
 		  * scale;
-	      } else { //label neurons
-		if (test) {
-		  int q = 0;
-		  I[ii] = 0.0;
-		  //check for active label
-		  //if same as last time, leave it, otherwise switch
-		  if (stof(currentLine.substr(last, next - last))
-		      > 0.5 && ii != lastLabel) {
-		    labelData << "sec= " << sec << ", Label="
-			      << lastLabel - inFeat << ", [ ";
-		    for (q = 0; q < numLabels; q++) {
-		      labelData << labelSpikes[q] << " ";
-		    }
-		    labelData << "]" << endl;
-		    for (q = 0; q < numLabels; q++) {
-		      labelSpikes[q] = 0;
-		    }
-		    lastLabel = ii;
-		  }
-		} else {
-		  I[ii] = (stof(currentLine.substr(last, next - last))
-			   - shift) * labelScale;
-		}
-	      }
+	      //  } else { //label neurons
+ 	      // 	if (test) {
+	      // 	  int q = 0;
+	      // 	  I[ii] = 0.0;
+	      // 	  //check for active label
+	      // 	  //if same as last time, leave it, otherwise switch
+	      // 	  if (stof(currentLine.substr(last, next - last))
+	      // 	      > 0.5 && ii != lastLabel) {
+	      // 	    labelData << "sec= " << sec << ", Label="
+	      // 		      << lastLabel - inFeat << ", [ ";
+	      // 	    for (q = 0; q < numLabels; q++) {
+	      // 	      labelData << labelSpikes[q] << " ";
+	      // 	    }
+	      // 	    labelData << "]" << endl;
+	      // 	    for (q = 0; q < numLabels; q++) {
+	      // 	      labelSpikes[q] = 0;
+	      // 	    }
+	      // 	    lastLabel = ii;
+	      // 	  }
+	      // 	} else {
+	      // 	  I[ii] = (stof(currentLine.substr(last, next - last))
+	      // 		   - shift) * labelScale;
+	      // 	}
+	      // }
 	      last = next + 1;
-	      //inputLine.erase(0,pos);
 	    }
 	    if (framesLeft == 0) {
 	      //load next line (or stop)
@@ -951,9 +962,10 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		       << " (ignoring all)" << endl;
 		  N_firings = 1;
 		}
-		if (test && inFeat <= i && i < feat) {
-		  labelSpikes[i - inFeat]++;
-		}
+		// removing notion of "labels"
+		// if (test && inFeat <= i && i < feat) {
+		//   labelSpikes[i - inFeat]++;
+		// }
 	      }
 	  }
 	  k = N_firings;
@@ -1080,19 +1092,36 @@ int main(int argc, char *argv[]) {
     ValueArg<int> testTime("x", "test",
 			   "number of seconds in the testing interval", false, 0,
 			   "integer");
-    ValueArg<float> scaleArg("s", "scale",
+    ValueArg<float> scaleArg("c", "scale",
 			   "coefficient by which to scale input values", false, 1.0,
 			   "float");
+    SwitchArg kaldiArg("k","kaldi-mode",
+		       "enable reading and writing of kaldi-compatible files;\n\
+Requires num-feats and step-size to be specified");
+    ValueArg<int> numFeatsArg("n", "num-feats",
+			      "number of features on each line of the input file",
+			      false, 0, "integer");
+    ValueArg<int> stepArg("s", "step", "frame length of input in milliseconds", false, 0, "integer");
     cmd.add(inFile);
     cmd.add(maxTime);
     cmd.add(trainTime);
     cmd.add(testTime);
     cmd.add(netFile);
     cmd.add(scaleArg);
+    cmd.add(kaldiArg);
+    cmd.add(numFeatsArg);
+    cmd.add(stepArg);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     string netFilename = netFile.getValue();
     float scale = scaleArg.getValue();
+    bool kaldiMode = kaldiArg.getValue();
+    int numFeats = numFeatsArg.getValue();
+    int stepSize = stepArg.getValue();
+    if (kaldiMode && (numFeats == 0 || stepSize == 0)){
+      cerr << "Kaldi mode requires specification of num-feats and step";
+      return 1;
+    }
     maxSecs = maxTime.getValue();
     trainSecs = trainTime.getValue();
     testSecs = testTime.getValue();
@@ -1108,7 +1137,7 @@ int main(int argc, char *argv[]) {
     //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
     //net2->saveTo("network2.dat");
 
-    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale);
+    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
