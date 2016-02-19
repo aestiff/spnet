@@ -52,7 +52,7 @@ public:
   //SpikingNetwork(int Ne, int Ni, int M, int D);
   SpikingNetwork(string filename);
   SpikingNetwork();
-  void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle);
+  void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle, float scale);
   void saveTo(string filename);
   //	void polychronous(int nnum);
   //	void all_polychronous();
@@ -781,11 +781,11 @@ SpikingNetwork::SpikingNetwork(string filename){
 */
 
 void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
-			      string fileHandle) {
+			      string fileHandle, float scale) {
   cout << "simulate\n";
   short step = 10;
   short framesLeft = step - 1;
-  float scale = 1.0;
+  //float scale = 1.0;
   float labelScale = 1.0;
   float shift = 0.66;
   bool done = false;
@@ -846,12 +846,15 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   for (i = 0; i < N; i++) {
     I[i] = 0.0;	// reset the input
   }
+  fs = fopen("spikes.dat", "w");
+  int testCounter =  0;
   while (!done)		// different ways to be done
     {
-      if (sec % (trainSecs + testSecs) == 0) {
+      if (trainSecs > 0 && sec % (trainSecs + testSecs) == 0) {
 	test = false;
       } else if (sec % (trainSecs + testSecs) - trainSecs == 0) {
 	test = true;
+	testCounter = 0;
 	//all_polychronous();
       }
       t = 0;
@@ -982,13 +985,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 	  for (i = 0; i < N; i++) {
 	    // for numerical stability time step is 0.5 ms
-	    // TODO: umax
 	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
 						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
 	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
 						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
 	    u[i] += a[unitClass[i]] * ((v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]])
 					        * (v[i] - vr[unitClass[i]]) - u[i]);
+	    u[i] = min(umax[unitClass[i]],u[i]);
 	    LTP[i * (1001 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
 	      * LTP[i * (1001 + D) + (t + D)];
 	    LTD[i] *= LTDdecay[unitClass[i]];
@@ -997,16 +1000,14 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	}
       cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N
 	   << "\n";
-      //TODO: change this to append, only on test
-      //if (sec == 0){
-      fs = fopen("spikes.dat", "w");
-      for (i = 1; i < N_firings; i++) {
-	if (firings[i][0] >= 0) {
-	  fprintf(fs, "%d  %d\n", firings[i][0], firings[i][1]);
+
+      if (test){
+	for (i = 1; i < N_firings; i++) {
+	  if (firings[i][0] >= 0) {
+	    fprintf(fs, "%d  %d\n", firings[i][0] + (testCounter * 1000), firings[i][1]);
+	  }
 	}
       }
-      fclose(fs);
-      //}
       // prepare for the next sec
 
       // roll over LTP data to prefix of next second
@@ -1045,10 +1046,12 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	}
       }
       sec++;
+      testCounter = test ? testCounter + 1 : test;
       if (sec == maxSecs) {
 	done = true;
       }
     }
+  fclose(fs);
   if (inputData.is_open()) {
     inputData.close();
   }
@@ -1077,14 +1080,19 @@ int main(int argc, char *argv[]) {
     ValueArg<int> testTime("x", "test",
 			   "number of seconds in the testing interval", false, 0,
 			   "integer");
+    ValueArg<float> scaleArg("s", "scale",
+			   "coefficient by which to scale input values", false, 1.0,
+			   "float");
     cmd.add(inFile);
     cmd.add(maxTime);
     cmd.add(trainTime);
     cmd.add(testTime);
     cmd.add(netFile);
+    cmd.add(scaleArg);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     string netFilename = netFile.getValue();
+    float scale = scaleArg.getValue();
     maxSecs = maxTime.getValue();
     trainSecs = trainTime.getValue();
     testSecs = testTime.getValue();
@@ -1100,7 +1108,7 @@ int main(int argc, char *argv[]) {
     //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
     //net2->saveTo("network2.dat");
 
-    net->simulate(maxSecs, trainSecs, testSecs, fileHandle);
+    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
