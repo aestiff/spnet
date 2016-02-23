@@ -9,4 +9,5 @@ data/nn_feat_inp*.txt
 data/#*
 octave*
 *.txt
+*.scp
 /Default/

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <tclap/CmdLine.h>
+#include <queue>
 
 #define getrandom(max1) ((rand()%(int)((max1)))) // random integer between 0 and max-1
 using namespace std;
@@ -35,7 +36,7 @@ private:
   int *count; //class instance counts [numClasses]
   int *unitClass; // [N] classIDs for each neuron
   float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax, *caInact;	//[numClasses] (neuronal dynamics parameters)
-  bool *plastic;
+  bool *plastic, *record;
   float *A_plus, *A_minus, *tau_plus, *tau_minus, *max_weight; //[numClasses] class-level STDP params
   float *Cinv, *vrPlusVt, *kVrVt, *ab, *abVr, *LTPdecay, *LTDdecay;   // [numClasses] calculated coefficients
   float *v, *u; //[N]				// activity variables
@@ -52,7 +53,7 @@ public:
   //SpikingNetwork(int Ne, int Ni, int M, int D);
   SpikingNetwork(string filename);
   SpikingNetwork();
-  void simulate(int maxSecs, int trainSecs, int testSecs, string fileHandle, float scale, bool kaldiMode, int numFeats, int stepSize);
+  void simulate(int maxSecs, int trainSecs, int testSecs, string inFileName, float scale, bool kaldiMode, int numFeats, int stepSize, string outFileName);
   void saveTo(string filename);
   //	void polychronous(int nnum);
   //	void all_polychronous();
@@ -98,6 +99,7 @@ SpikingNetwork::SpikingNetwork() {
   tau_minus = new float[numClasses];
   plastic = new bool[numClasses];  
   max_weight = new float[numClasses];
+  record = new bool[numClasses];
   
   Cinv = new float[numClasses];
   vrPlusVt = new float[numClasses];
@@ -130,6 +132,7 @@ SpikingNetwork::SpikingNetwork() {
   tau_minus[0] = 20.0;
   plastic[0] = true;
   max_weight[0] = 10.0;
+  record[0] = true;
   
   //FS (basket) neurons from Izhikevich 2008
   count[1] = 200;
@@ -151,7 +154,8 @@ SpikingNetwork::SpikingNetwork() {
   tau_minus[1] = 1.0;
   plastic[1] = false;
   max_weight[1] = -5.0;
-
+  record[1] = true;
+  
   for (i = 0; i < count[0]; i++) {
     unitClass[i] = 0;	// RS type 
   }
@@ -290,7 +294,8 @@ void SpikingNetwork::saveTo(string filename){
 	to_string(tau_plus[i]) + "," +
 	to_string(tau_minus[i]) + "," +
 	to_string((uint)plastic[i]) + "," +
-	to_string(max_weight[i]) + "\n";
+	to_string(max_weight[i]) + "," +
+	to_string((uint)record[i]) +"\n";
     }
     //write neuron-level parameters
     for (i=0; i < N; i++){
@@ -364,16 +369,17 @@ SpikingNetwork::SpikingNetwork(string filename){
     tau_minus = new float[numClasses];
     plastic = new bool[numClasses];  
     max_weight = new float[numClasses];
-
+    record = new bool[numClasses];
+    
     float flput;
     bool bput;
     for (i = 0; i < numClasses; i++){
       getline(infile, line);
-      for (j = 0; j < 19; j++){
+      for (j = 0; j < 20; j++){
 	next = line.find(",", last);
 	if (j == 0) {
 	  input = stoi(line.substr(last, next - last));
-	} else if (j == 17){
+	} else if (j == 17 || j == 19){
 	  bput = (bool)stoul(line.substr(last, next - last));
 	} else {
 	  flput = stof(line.substr(last, next - last));
@@ -435,6 +441,9 @@ SpikingNetwork::SpikingNetwork(string filename){
 	  break;
 	case 18:
 	  max_weight[i] = flput;
+	  break;
+	case 19:
+	  record[i] = bput;
 	  break;
 	}
 	last = next + 1;
@@ -780,12 +789,13 @@ SpikingNetwork::SpikingNetwork(string filename){
   }
 */
 
-// These params should probably be object properties or something
+// TODO TODO TODO:
+// This has become a mess. Need to factor out input, set engine object params, move engine out of
+// network class, etc.
 void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
-			      string fileHandle, float scale, bool kaldiMode, int numFeats, int stepSize) {
+			      string inFileName, float scale, bool kaldiMode, int numFeats, int stepSize, string outFileName) {
   cout << "simulate\n";
-  short step = 10;
-  short framesLeft = step - 1;
+  short step = 10; //default
   //float scale = 1.0;
   //float labelScale = 1.0;
   //float shift = 0.66;
@@ -801,8 +811,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   string currentLine;
   int feat = 0;
   //int inFeat = 0;
-  FILE *fs;
+  ofstream outputFile;
+  ofstream indexFile;
   sec = 0;
+  queue<string> headers;
+  queue<int> headerTimes;
+  queue<int> tailTimes;
+  
   int N_firings;				// the number of fired neurons 
   const int N_firings_max = 100 * N;// upper limit on the number of fired neurons per sec
   int firings[N_firings_max][2];              // indices and timings of spikes
@@ -810,9 +825,9 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   firings[0][0] = -D;	// put a dummy spike at -D for simulation efficiency 
   firings[0][1] = 0;	// index of the dummy spike  
 
-  if (fileHandle != "") {
+  if (inFileName != "") {
     fileInput = true;
-    inputData.open(fileHandle);
+    inputData.open(inFileName);
     //labelData.open("labels.txt");
     if (inputData.is_open()) {
       if (!kaldiMode){
@@ -839,7 +854,18 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       }
       //load first input line
       getline(inputData, currentLine);
-      getline(inputData, inputLine); //pre-load next line
+      //pre-load next line (almost certainly not getting a benefit from this)
+      getline(inputData, inputLine); 
+      if (kaldiMode){
+	size_t next = currentLine.find_first_not_of(" \t\r\n");
+	if (!isdigit(currentLine[next])){
+	  //queue line to output to ark
+	  headers.push(currentLine);
+	  headerTimes.push(t);
+	  currentLine = inputLine;
+	  getline(inputData, inputLine);
+	}
+      }
     } else {
       cout << "Could not open file." << endl;
     }
@@ -853,12 +879,22 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //for (i = 0; i < numLabels; i++) {
   //  labelSpikes[i] = 0;
   //}
-
+  short framesLeft = step - 1;
   for (i = 0; i < N; i++) {
     I[i] = 0.0;	// reset the input
   }
-  fs = fopen("spikes.dat", "w");
+  outputFile.open(outFileName);
+  if (kaldiMode){
+    size_t pos = outFileName.find_last_of(".");
+    if (pos != string::npos) {
+      indexFile.open(outFileName.substr(0,pos)+".scp");
+    } else {
+      indexFile.open(outFileName + ".scp");
+    }
+  }
   int testCounter =  0;
+  int runoff = 1;
+  bool endUtt = false;
   while (!done)		// different ways to be done
     {
       if (trainSecs > 0 && sec % (trainSecs + testSecs) == 0) {
@@ -884,8 +920,8 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      I[ii] = 0.0;
 	    }
 	    //parse input
-	    size_t next = 0;
-	    size_t last = 0;
+	    size_t next = currentLine.find_first_not_of(" \t\r\n");
+	    size_t last = next;
 	    for (ii = 0; ii < feat; ii++) {
 	      next = currentLine.find(" ", last);
 	      // removing notion of "labels"
@@ -922,16 +958,39 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      //load next line (or stop)
 	      currentLine = inputLine;
 	      getline(inputData, inputLine);
-	      if (inputData.eof()) {
+	      if (kaldiMode){
+		size_t next = currentLine.find_first_not_of(" \t\r\n");
+		if (currentLine != "" && !isdigit(currentLine[next])){
+		  //queue line to output to ark
+		  cout << "header at t = " << t << "\n";
+		  headers.push(currentLine);
+		  headerTimes.push(t);
+		  currentLine = inputLine;
+		  getline(inputData, inputLine);
+		}
+		if (endUtt){ // not "done" if we get here
+		  endUtt = false;
+		  runoff = 1;
+		  //queue ']' for output
+		  cout << "tail at t = " << t << "\n";
+		  tailTimes.push(t);
+		}
+		if (currentLine[currentLine.length()-1] == ']'){
+		  endUtt = true;
+		}
+	      }
+	      if (preDone) {
+		done = true;
+	      }
+	      if (inputData.eof() && !preDone){
 		preDone = true;
 	      }
 	      //reset framesLeft
-	      framesLeft = step - 1;
+	      //if (!done){
+		framesLeft = step - 1;
+		//}
 	    } else {
 	      framesLeft--;
-	      if (preDone && framesLeft == 0) {
-		done = true;
-	      }
 	    }
 	  }
 	  //find all firings for the current time step, do necessary updates.
@@ -1012,11 +1071,112 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	}
       cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N
 	   << "\n";
-
+      //dense output in kaldi-mode, sparse (octave-compatible) otherwise.
       if (test){
-	for (i = 1; i < N_firings; i++) {
-	  if (firings[i][0] >= 0) {
-	    fprintf(fs, "%d  %d\n", firings[i][0] + (testCounter * 1000), firings[i][1]);
+	if (kaldiMode) {
+	  //note: for this to work, spikes at same time must have been appended in index order.
+	  //also, this may be unnecessarily complicated, but I was trying to avoid
+	  //evaluating conditionals for every neuron at every millisecond.
+	  j = 0;
+	  k = 0;
+	  int l = 0;
+	  int base = 0;
+	  if (!headerTimes.empty() && headerTimes.front() == j){
+	    outputFile << headers.front() << "\n  ";
+	    headers.pop();
+	    headerTimes.pop();
+	    //TODO: write scp
+	  }
+	  for (i = 1; i < N_firings; i++){
+	    if (firings[i][0] >= 0){  //rolled-over spikes have negative timings
+	      if (record[unitClass[firings[i][1]]]){ //only write if it's a recorded neuron.
+		//write everything that (didn't) happen in the interim
+		while (j < firings[i][0]){ //catch up to current millisecond
+		  while (k < numClasses){
+		    if (record[k]){
+		      while (l < count[k]){
+			outputFile << "0 ";
+			l++;
+		      }
+		    }
+		    k++;
+		    base = base + count[k-1];
+		    l = 0;
+		  }
+		  //find interrupts
+		  if (!tailTimes.empty() && tailTimes.front() == j) {
+		    outputFile << "]";
+		    tailTimes.pop();
+		  }
+		  outputFile << "\n  ";
+		  j++;
+		  k = 0;
+		  base = 0;
+		  if (!headerTimes.empty() && headerTimes.front() == j){
+		    outputFile << headers.front() << "\n  ";
+		    headers.pop();
+		    headerTimes.pop();
+		    //TODO: write scp
+		  }
+		}
+		//now we're in the right millisecond, get into the right class.
+		while (k < unitClass[firings[i][1]]){
+		  if (record[k]){
+		    while (l < count[k]){
+		      outputFile << "0 ";
+		      l++;
+		    }
+		  }
+		  k++;
+		  base = base + count[k-1];
+		  l = 0;
+		}
+		//now we're in the right class, get to the right neuron
+		while (l < firings[i][1] - base){ 
+		  outputFile << "0 ";
+		  l++;
+		}
+		//output the spike
+		outputFile << "1 ";
+		l++;
+	      }
+	    }
+	  }
+	  //done with last spike, pad out to the end of the second
+	  //TODO: end of file?
+	  while (j < 1000){ //go until the last millisecond
+	    while (k < numClasses){
+	      if (record[k]){
+		while (l < count[k]){
+		  outputFile << "0 ";
+		  l++;
+		}
+	      }
+	      k++;
+	      base = base + count[k-1];
+	      l = 0;
+	    }
+	    //find interrupts
+	    if (!tailTimes.empty() && tailTimes.front() == j) {
+	      outputFile << "]";
+	      tailTimes.pop();
+	    }
+	    outputFile << "\n  ";
+	    j++;
+	    k = 0;
+	    base = 0;
+	    if (!headerTimes.empty() && headerTimes.front() == j){
+	      outputFile << headers.front() << "\n  ";
+	      headers.pop();
+	      headerTimes.pop();
+	      //TODO: write scp
+	    }
+	  }
+	} else {
+	  for (i = 1; i < N_firings; i++) {
+	    if (firings[i][0] >= 0) {
+	      outputFile << firings[i][0] + (testCounter * 1000) << " " << firings[i][1] << "\n";
+	    }
 	  }
 	}
       }
@@ -1041,7 +1201,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       N_firings = N_firings - k;
 
       for (i = 0; i < N; i++) {
-	if (plastic[unitClass[i]]){// modify only exc connections
+	if (plastic[unitClass[i]]){// modify only plastic connections
 	  for (j = 0; j < M; j++) {
 	    s[i * M + j] += 0.01 + sd[i * M + j]; //only place for weight modification
 	    sd[i * M + j] *= 0.9; // ??
@@ -1059,13 +1219,19 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       }
       sec++;
       testCounter = test ? testCounter + 1 : test;
+      if (runoff > 0) {
+	runoff--;
+      }
       if (sec == maxSecs) {
 	done = true;
       }
     }
-  fclose(fs);
+  outputFile.close();
   if (inputData.is_open()) {
     inputData.close();
+  }
+  if (indexFile.is_open()) {
+    indexFile.close();
   }
 
 }
@@ -1102,6 +1268,10 @@ Requires num-feats and step-size to be specified");
 			      "number of features on each line of the input file",
 			      false, 0, "integer");
     ValueArg<int> stepArg("s", "step", "frame length of input in milliseconds", false, 0, "integer");
+    ValueArg <string> outFileArg("o", "output",
+				 "name of file to which to write spike timings",
+				 false, "spikes.dat", "string");
+
     cmd.add(inFile);
     cmd.add(maxTime);
     cmd.add(trainTime);
@@ -1111,6 +1281,7 @@ Requires num-feats and step-size to be specified");
     cmd.add(kaldiArg);
     cmd.add(numFeatsArg);
     cmd.add(stepArg);
+    cmd.add(outFileArg);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     string netFilename = netFile.getValue();
@@ -1118,6 +1289,7 @@ Requires num-feats and step-size to be specified");
     bool kaldiMode = kaldiArg.getValue();
     int numFeats = numFeatsArg.getValue();
     int stepSize = stepArg.getValue();
+    string outFile = outFileArg.getValue();
     if (kaldiMode && (numFeats == 0 || stepSize == 0)){
       cerr << "Kaldi mode requires specification of num-feats and step";
       return 1;
@@ -1137,7 +1309,7 @@ Requires num-feats and step-size to be specified");
     //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
     //net2->saveTo("network2.dat");
 
-    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize);
+    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize, outFile);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
