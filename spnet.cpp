@@ -1127,15 +1127,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		  }
 		  //find interrupts
 		  if (!tailTimes.empty() && tailTimes.front() == j) {
-		    outputFile << "]";
-		    outByteCount++;
+		    outputFile << "]\n";
+		    outByteCount += 2;
 		    tailTimes.pop();
+		  } else {
+		    outputFile << "\n  ";
+		    outByteCount += 3;
 		  }
-		  outputFile << "\n  ";
-		  outByteCount += 3;
-		  j++;
-		  k = 0;
-		  base = 0;
 		  if (!headerTimes.empty() && headerTimes.front() == j){
 		    string uttHead = headers.front();
 		    outputFile << uttHead << "\n  ";
@@ -1147,6 +1145,9 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		    headers.pop();
 		    headerTimes.pop();
 		  }
+		  j++;
+		  k = 0;
+		  base = 0;
 		}
 		//now we're in the right millisecond, get into the right class.
 		while (k < unitClass[firings[i][1]]){
@@ -1190,15 +1191,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    }
 	    //find interrupts
 	    if (!tailTimes.empty() && tailTimes.front() == j) {
-	      outputFile << "]";
-	      outByteCount++;
+	      outputFile << "]\n";
+	      outByteCount += 2;
 	      tailTimes.pop();
+	    } else {
+	      outputFile << "\n  ";
+	      outByteCount += 3;
 	    }
-	    outputFile << "\n  ";
-	    outByteCount += 3;
-	    j++;
-	    k = 0;
-	    base = 0;
 	    if (!headerTimes.empty() && headerTimes.front() == j){
 	      string uttHead = headers.front();
 	      outputFile << uttHead << "\n  ";
@@ -1210,6 +1209,9 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      headers.pop();
 	      headerTimes.pop();
 	    }
+	    j++;
+	    k = 0;
+	    base = 0;
 	  }
 	} else {
 	  for (i = 1; i < N_firings; i++) {
