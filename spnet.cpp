@@ -975,7 +975,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		size_t next = currentLine.find_first_not_of(" \t\r\n");
 		if (currentLine != "" && !isdigit(currentLine[next])){
 		  //queue line to output to ark
-		  cout << "header at t = " << t << "\n";
+		  //cout << "header at t = " << t << "\n";
 		  headers.push(currentLine);
 		  headerTimes.push(t);
 		  currentLine = inputLine;
@@ -985,7 +985,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		  endUtt = false;
 		  runoff = 1;
 		  //queue ']' for output
-		  cout << "tail at t = " << t << "\n";
+		  //cout << "tail at t = " << t << "\n";
 		  tailTimes.push(t);
 		}
 		if (currentLine[currentLine.length()-1] == ']'){
@@ -1082,8 +1082,8 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  }
 	  t++;
 	}
-      cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N
-	   << "\n";
+      //cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N
+      //<< "\n";
       //dense output in kaldi-mode, sparse (octave-compatible) otherwise.
       if (test){
 	if (kaldiMode) {
