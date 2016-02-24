@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <tclap/CmdLine.h>
 #include <queue>
 
@@ -813,6 +814,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //int inFeat = 0;
   ofstream outputFile;
   ofstream indexFile;
+  ulong outByteCount = 0;
   sec = 0;
   queue<string> headers;
   queue<int> headerTimes;
@@ -883,6 +885,16 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   for (i = 0; i < N; i++) {
     I[i] = 0.0;	// reset the input
   }
+  char currentPath[FILENAME_MAX];
+  if (!getcwd(currentPath, sizeof(currentPath))){
+    cerr << "Error: getcwd()";
+    return;
+  }
+  //make filename absolute
+  if (outFileName[0] != '/'){
+    string cwd(currentPath);
+    outFileName = cwd + "/" + outFileName;
+  }
   outputFile.open(outFileName);
   if (kaldiMode){
     size_t pos = outFileName.find_last_of(".");
@@ -893,6 +905,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
     }
   }
   int testCounter =  0;
+  //TODO: runoff and end of file
   int runoff = 1;
   bool endUtt = false;
   while (!done)		// different ways to be done
@@ -1081,11 +1094,19 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  k = 0;
 	  int l = 0;
 	  int base = 0;
+	  size_t pos = 0;
+	  string key = "";
+	  ulong offset = 0;
 	  if (!headerTimes.empty() && headerTimes.front() == j){
-	    outputFile << headers.front() << "\n  ";
+	    string uttHead = headers.front();
+	    outputFile << uttHead << "\n  ";
+	    outByteCount += (uttHead.length() + 3);
+	    pos = uttHead.find_first_of(" \t");
+	    key = uttHead.substr(0, pos);
+	    offset = outByteCount - 4;
+	    indexFile << key + " " + outFileName + ":" + to_string(offset) + "\n";
 	    headers.pop();
 	    headerTimes.pop();
-	    //TODO: write scp
 	  }
 	  for (i = 1; i < N_firings; i++){
 	    if (firings[i][0] >= 0){  //rolled-over spikes have negative timings
@@ -1097,6 +1118,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		      while (l < count[k]){
 			outputFile << "0 ";
 			l++;
+			outByteCount += 2;
 		      }
 		    }
 		    k++;
@@ -1106,17 +1128,24 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		  //find interrupts
 		  if (!tailTimes.empty() && tailTimes.front() == j) {
 		    outputFile << "]";
+		    outByteCount++;
 		    tailTimes.pop();
 		  }
 		  outputFile << "\n  ";
+		  outByteCount += 3;
 		  j++;
 		  k = 0;
 		  base = 0;
 		  if (!headerTimes.empty() && headerTimes.front() == j){
-		    outputFile << headers.front() << "\n  ";
+		    string uttHead = headers.front();
+		    outputFile << uttHead << "\n  ";
+		    outByteCount += (uttHead.length() + 3);
+		    pos = uttHead.find_first_of(" \t");
+		    key = uttHead.substr(0, pos);
+		    offset = outByteCount - 4;
+		    indexFile << key + " " + outFileName + ":" + to_string(offset) + "\n";
 		    headers.pop();
 		    headerTimes.pop();
-		    //TODO: write scp
 		  }
 		}
 		//now we're in the right millisecond, get into the right class.
@@ -1124,6 +1153,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		  if (record[k]){
 		    while (l < count[k]){
 		      outputFile << "0 ";
+		      outByteCount += 2;
 		      l++;
 		    }
 		  }
@@ -1134,21 +1164,23 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 		//now we're in the right class, get to the right neuron
 		while (l < firings[i][1] - base){ 
 		  outputFile << "0 ";
+		  outByteCount += 2;
 		  l++;
 		}
 		//output the spike
 		outputFile << "1 ";
+		outByteCount += 2;
 		l++;
 	      }
 	    }
 	  }
 	  //done with last spike, pad out to the end of the second
-	  //TODO: end of file?
-	  while (j < 1000){ //go until the last millisecond
+	  while (j < t){ //go until the last millisecond that was simulated
 	    while (k < numClasses){
 	      if (record[k]){
 		while (l < count[k]){
 		  outputFile << "0 ";
+		  outByteCount += 2;
 		  l++;
 		}
 	      }
@@ -1159,17 +1191,24 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    //find interrupts
 	    if (!tailTimes.empty() && tailTimes.front() == j) {
 	      outputFile << "]";
+	      outByteCount++;
 	      tailTimes.pop();
 	    }
 	    outputFile << "\n  ";
+	    outByteCount += 3;
 	    j++;
 	    k = 0;
 	    base = 0;
 	    if (!headerTimes.empty() && headerTimes.front() == j){
-	      outputFile << headers.front() << "\n  ";
+	      string uttHead = headers.front();
+	      outputFile << uttHead << "\n  ";
+	      outByteCount += (uttHead.length() + 3);
+	      pos = uttHead.find_first_of(" \t");
+	      key = uttHead.substr(0, pos);
+	      offset = outByteCount - 4;
+	      indexFile << key + " " + outFileName + ":" + to_string(offset) + "\n";
 	      headers.pop();
 	      headerTimes.pop();
-	      //TODO: write scp
 	    }
 	  }
 	} else {
