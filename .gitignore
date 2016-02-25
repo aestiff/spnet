@@ -7,6 +7,7 @@ spnet
 data/raw_*
 data/nn_feat_inp*.txt
 data/#*
+data/spike*
 octave*
 *.txt
 *.scp

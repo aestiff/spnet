@@ -821,7 +821,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   queue<int> tailTimes;
   
   int N_firings;				// the number of fired neurons 
-  const int N_firings_max = 100 * N;// upper limit on the number of fired neurons per sec
+  const int N_firings_max = 150 * N;// upper limit on the number of fired neurons per sec
   int firings[N_firings_max][2];              // indices and timings of spikes
   N_firings = 1;		// spike timings
   firings[0][0] = -D;	// put a dummy spike at -D for simulation efficiency 
@@ -905,7 +905,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
     }
   }
   int testCounter =  0;
-  //TODO: runoff and end of file
+  //TODO: runoff
   int runoff = 1;
   bool endUtt = false;
   while (!done)		// different ways to be done
@@ -973,7 +973,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      getline(inputData, inputLine);
 	      if (kaldiMode){
 		size_t next = currentLine.find_first_not_of(" \t\r\n");
-		if (currentLine != "" && !isdigit(currentLine[next])){
+		if (currentLine != "" && currentLine[currentLine.length()-1]=='['){
 		  //queue line to output to ark
 		  //cout << "header at t = " << t << "\n";
 		  headers.push(currentLine);
