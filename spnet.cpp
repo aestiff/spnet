@@ -54,7 +54,8 @@ public:
   //SpikingNetwork(int Ne, int Ni, int M, int D);
   SpikingNetwork(string filename);
   SpikingNetwork();
-  void simulate(int maxSecs, int trainSecs, int testSecs, string inFileName, float scale, bool kaldiMode, int numFeats, int stepSize, string outFileName);
+  void simulate(int maxSecs, int trainSecs, int testSecs, string inFileName, float scale,
+		bool kaldiMode, int numFeats, int stepSize, string outFileName, int frequency);
   void saveTo(string filename);
   //	void polychronous(int nnum);
   //	void all_polychronous();
@@ -77,8 +78,6 @@ SpikingNetwork::SpikingNetwork() {
   D_pre = new int[N * 3 * M];
   s_pre = new float*[N * 3 * M];
   sd_pre = new float*[N * 3 * M];
-  LTP = new float[N * (1001 + D)];
-  LTD = new float[N];
   unitClass = new int[N];
 
   count = new int[numClasses];
@@ -110,9 +109,6 @@ SpikingNetwork::SpikingNetwork() {
   LTPdecay = new float[numClasses];
   LTDdecay = new float[numClasses];
     
-  v = new float[N];
-  u = new float[N];
-
   //RS neurons from Izhikevich 2007, "Dynamical Systems in Neuroscience", Chapter 8
   count[0] = 800;
   C[0] = 100.0;
@@ -169,8 +165,8 @@ SpikingNetwork::SpikingNetwork() {
     kVrVt[i] = kdyn[i] * vr[i] * vt[i];
     ab[i] = a[i] * b[i];
     abVr[i] = a[i] * b[i] * vr[i];
-    LTPdecay[i] = 1.0 - (1.0/tau_plus[i]);
-    LTDdecay[i] = 1.0 - (1.0/tau_minus[i]);
+    LTPdecay[i] = 1.0 - (1.0/tau_plus[i]); 
+    LTDdecay[i] = 1.0 - (1.0/tau_minus[i]); 
   }
   for (i = 0; i < N; i++) {
     for (j = 0; j < M; j++) {
@@ -240,21 +236,6 @@ SpikingNetwork::SpikingNetwork() {
 	}
       }
     }
-  }
-
-  for (i = 0; i < N; i++) {
-    for (j = 0; j < 1 + D; j++) {
-      LTP[i * (1001 + D) + j] = 0.0;
-    }
-  }
-  for (i = 0; i < N; i++) {
-    LTD[i] = 0.0;
-  }
-  for (i = 0; i < N; i++) {
-    v[i] = -65.0; // initial values for v
-  }
-  for (i = 0; i < N; i++) {
-    u[i] = 0.2 * v[i];	// initial values for u
   }
 }
 
@@ -546,27 +527,6 @@ SpikingNetwork::SpikingNetwork(string filename){
 	}
       }
     }
-
-    //might make sense to move this stuff into simulate()
-    LTP = new float[N * (1001 + D)];
-    LTD = new float[N];
-    v = new float[N];
-    u = new float[N];
-
-    for (i = 0; i < N; i++) {
-      for (j = 0; j < 1 + D; j++) {
-	LTP[i * (1001 + D) + j] = 0.0;
-      }
-    }
-    for (i = 0; i < N; i++) {
-      LTD[i] = 0.0;
-    }
-    for (i = 0; i < N; i++) {
-      v[i] = -65.0; // initial values for v
-    }
-    for (i = 0; i < N; i++) {
-      u[i] = 0.2 * v[i];	// initial values for u
-    }
   }
   cout << "done\n";
 }
@@ -791,10 +751,11 @@ SpikingNetwork::SpikingNetwork(string filename){
 */
 
 // TODO TODO TODO:
-// This has become a mess. Need to factor out input, set engine object params, move engine out of
-// network class, etc.
+// This has become a mess. Need to factor out input and output, set engine object params,
+// move engine out of network class, etc.
 void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
-			      string inFileName, float scale, bool kaldiMode, int numFeats, int stepSize, string outFileName) {
+			      string inFileName, float scale, bool kaldiMode,
+			      int numFeats, int stepSize, string outFileName, int frequency) {
   cout << "simulate\n";
   short step = 10; //default
   //float scale = 1.0;
@@ -881,6 +842,27 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //for (i = 0; i < numLabels; i++) {
   //  labelSpikes[i] = 0;
   //}
+
+  LTP = new float[N * (1001 + D)];
+  LTD = new float[N];
+  v = new float[N];
+  u = new float[N];
+  //TODO: frequency  
+  for (i = 0; i < N; i++) {
+    for (j = 0; j < 1 + D; j++) {
+      LTP[i * (1001 + D) + j] = 0.0;
+    }
+  }
+  for (i = 0; i < N; i++) {
+    LTD[i] = 0.0;
+  }
+  for (i = 0; i < N; i++) {
+    v[i] = -65.0; // initial values for v
+  }
+  for (i = 0; i < N; i++) {
+    u[i] = 0.2 * v[i];	// initial values for u
+  }
+  
   short framesLeft = step - 1;
   for (i = 0; i < N; i++) {
     I[i] = 0.0;	// reset the input
@@ -918,6 +900,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	//all_polychronous();
       }
       t = 0;
+      //TODO: frequency
       while (t < 1000 && !done)				// simulation of 1 sec
 	{
 	  if (!fileInput) {
@@ -1012,6 +995,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      {
 		v[i] = c[unitClass[i]];	// voltage reset
 		u[i] += d[unitClass[i]];	// recovery variable reset
+		//TODO: frequency
 		LTP[i * (1001 + D) + (t + D)] = A_plus[unitClass[i]];
 		LTD[i] = A_minus[unitClass[i]];
 		for (j = 0; j < N_pre[i]; j++) {
@@ -1023,6 +1007,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 		  // generalization handled by setting LTP curve parameters on class-basis
 		  // (would a switch save computation?)
+		  //TODO: frequency
 		  *sd_pre[i * 3 * M + j] += LTP[I_pre[i * 3 * M + j]
 						* (1001 + D)
 						+ (t + D - D_pre[i * 3 * M + j] - 1)];
@@ -1069,6 +1054,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 	  for (i = 0; i < N; i++) {
 	    // for numerical stability time step is 0.5 ms
+	    // TODO: adjust all of this for frequency
 	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
 						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
 	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
@@ -1216,6 +1202,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	} else {
 	  for (i = 1; i < N_firings; i++) {
 	    if (firings[i][0] >= 0) {
+	      //TODO: frequency
 	      outputFile << firings[i][0] + (testCounter * 1000) << " " << firings[i][1] << "\n";
 	    }
 	  }
@@ -1226,6 +1213,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       // roll over LTP data to prefix of next second
       for (i = 0; i < N; i++) {	
 	for (j = 0; j < D + 1; j++) {
+	  //TODO: frequency
 	  LTP[i * (1001 + D) + j] = LTP[i * (1001 + D) + (1000 + j)];
 	}
       }
@@ -1236,6 +1224,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       }
       // roll over firings within delay period
       for (i = 1; i < N_firings - k; i++) {
+	//TODO: frequency
 	firings[i][0] = firings[k + i][0] - 1000;
 	firings[i][1] = firings[k + i][1];
       }
@@ -1304,15 +1293,16 @@ int main(int argc, char *argv[]) {
 			   "float");
     SwitchArg kaldiArg("k","kaldi-mode",
 		       "enable reading and writing of kaldi-compatible files;\n\
-Requires num-feats and step-size to be specified");
+Requires --num-feats and --step to be specified");
     ValueArg<int> numFeatsArg("n", "num-feats",
 			      "number of features on each line of the input file",
 			      false, 0, "integer");
-    ValueArg<int> stepArg("s", "step", "frame length of input in milliseconds", false, 0, "integer");
+    ValueArg<int> stepArg("s", "step", "number of time steps (defined by --frequency) per input frame", false, 0, "integer");
     ValueArg <string> outFileArg("o", "output",
 				 "name of file to which to write spike timings",
 				 false, "spikes.dat", "string");
-
+    ValueArg<int> frequencyArg("f", "frequency", "input sample rate in Hz", false, 1000, "integer");
+    
     cmd.add(inFile);
     cmd.add(maxTime);
     cmd.add(trainTime);
@@ -1323,6 +1313,7 @@ Requires num-feats and step-size to be specified");
     cmd.add(numFeatsArg);
     cmd.add(stepArg);
     cmd.add(outFileArg);
+    cmd.add(frequencyArg);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     string netFilename = netFile.getValue();
@@ -1331,6 +1322,8 @@ Requires num-feats and step-size to be specified");
     int numFeats = numFeatsArg.getValue();
     int stepSize = stepArg.getValue();
     string outFile = outFileArg.getValue();
+    int frequency = frequencyArg.getValue();
+    
     if (kaldiMode && (numFeats == 0 || stepSize == 0)){
       cerr << "Kaldi mode requires specification of num-feats and step";
       return 1;
@@ -1350,7 +1343,8 @@ Requires num-feats and step-size to be specified");
     //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
     //net2->saveTo("network2.dat");
 
-    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize, outFile);
+    // ridiculous
+    net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize, outFile, frequency);
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
