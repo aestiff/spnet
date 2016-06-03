@@ -462,6 +462,12 @@ SpikingNetwork::SpikingNetwork(string filename){
     sd = new float[N*M];
     delays_length = new short[N*D];
     delays = new short[N*D*M];
+    for (i = 0; i < N * D; i++){
+      delays_length[i] = 0;
+      for (j = 0; j < M; j++){
+	delays[i * N * D + j] = -1;
+      }
+    }
 
     cout << "parse synapse params\n";
     //parse synapse-level params
