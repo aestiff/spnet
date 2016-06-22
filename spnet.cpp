@@ -33,7 +33,7 @@ private:
   //^^[index of presynaptic neuron][delay to efferent][column of post[N][] containing the index of efferent for neuron N]
   int *N_pre, *I_pre, *D_pre; //N_pre[N], I_pre[N][3*M], D_pre[N][3*M];	// presynaptic information
   float **s_pre, **sd_pre; // [N][3*M];	// presynaptic weights
-  float *LTP, *LTD; // LTP[N][1001+D], LTD[N];	                // STDP functions 
+  float *LTP, *LTD; // LTP[N][frequency+1+D], LTD[N];	                // STDP functions 
   int *count; //class instance counts [numClasses]
   int *unitClass; // [N] classIDs for each neuron
   float  *C, *kdyn, *vr, *vt, *peak, *a, *b, *bhyp, *c, *d, *umax, *caInact;	//[numClasses] (neuronal dynamics parameters)
@@ -767,6 +767,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //float scale = 1.0;
   //float labelScale = 1.0;
   //float shift = 0.66;
+  double updateMs = 1000.0 / frequency;
   bool done = false;
   bool preDone = false;
   bool test = false;
@@ -849,14 +850,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //  labelSpikes[i] = 0;
   //}
 
-  LTP = new float[N * (1001 + D)];
+  LTP = new float[N * (frequency + 1 + D)];
   LTD = new float[N];
   v = new float[N];
   u = new float[N];
-  //TODO: frequency  
   for (i = 0; i < N; i++) {
     for (j = 0; j < 1 + D; j++) {
-      LTP[i * (1001 + D) + j] = 0.0;
+      LTP[i * (frequency + 1 + D) + j] = 0.0;
     }
   }
   for (i = 0; i < N; i++) {
@@ -906,8 +906,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	//all_polychronous();
       }
       t = 0;
-      //TODO: frequency
-      while (t < 1000 && !done)				// simulation of 1 sec
+      while (t < frequency && !done)				// simulation of 1 sec
 	{
 	  if (!fileInput) {
 	    for (i = 0; i < N; i++) {
@@ -1001,8 +1000,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      {
 		v[i] = c[unitClass[i]];	// voltage reset
 		u[i] += d[unitClass[i]];	// recovery variable reset
-		//TODO: frequency
-		LTP[i * (1001 + D) + (t + D)] = A_plus[unitClass[i]];
+		LTP[i * (frequency + 1 + D) + (t + D)] = A_plus[unitClass[i]];
 		LTD[i] = A_minus[unitClass[i]];
 		for (j = 0; j < N_pre[i]; j++) {
 		  // this spike was after pre-synaptic spikes;
@@ -1013,9 +1011,8 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 		  // generalization handled by setting LTP curve parameters on class-basis
 		  // (would a switch save computation?)
-		  //TODO: frequency
 		  *sd_pre[i * 3 * M + j] += LTP[I_pre[i * 3 * M + j]
-						* (1001 + D)
+						* (frequency + 1 + D)
 						+ (t + D - D_pre[i * 3 * M + j] - 1)];
 		}
 		firings[N_firings][0] = t;
@@ -1059,17 +1056,16 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  }
 
 	  for (i = 0; i < N; i++) {
-	    // for numerical stability time step is 0.5 ms
-	    // TODO: adjust all of this for frequency
-	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
+	    // for numerical stability time step is half the update frequency
+	    v[i] += 0.5 * updateMs * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
 						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
-	    v[i] += 0.5 * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
+	    v[i] += 0.5 * updateMs * Cinv[unitClass[i]] * (kdyn[unitClass[i]] * (v[i] - vrPlusVt[unitClass[i]])
 						* v[i] + kVrVt[unitClass[i]] - u[i]) + I[i];
 	    u[i] += a[unitClass[i]] * ((v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]])
 					        * (v[i] - vr[unitClass[i]]) - u[i]);
 	    u[i] = min(umax[unitClass[i]],u[i]);
-	    LTP[i * (1001 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
-	      * LTP[i * (1001 + D) + (t + D)];
+	    LTP[i * (frequency + 1 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
+	      * LTP[i * (frequency + 1 + D) + (t + D)];
 	    LTD[i] *= LTDdecay[unitClass[i]];
 	  }
 	  t++;
@@ -1208,8 +1204,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	} else {
 	  for (i = 1; i < N_firings; i++) {
 	    if (firings[i][0] >= 0) {
-	      //TODO: frequency
-	      outputFile << firings[i][0] + (testCounter * 1000) << " " << firings[i][1] << "\n";
+	      outputFile << firings[i][0] + (testCounter * frequency) << " " << firings[i][1] << "\n";
 	    }
 	  }
 	}
@@ -1219,19 +1214,17 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       // roll over LTP data to prefix of next second
       for (i = 0; i < N; i++) {	
 	for (j = 0; j < D + 1; j++) {
-	  //TODO: frequency
-	  LTP[i * (1001 + D) + j] = LTP[i * (1001 + D) + (1000 + j)];
+	  LTP[i * (frequency + 1 + D) + j] = LTP[i * (frequency + 1 + D) + (frequency + j)];
 	}
       }
       k = N_firings - 1;
       //find first firing within delay period
-      while (1000 - firings[k][0] < D) {
+      while (frequency - firings[k][0] < D) {
 	k--;
       }
       // roll over firings within delay period
       for (i = 1; i < N_firings - k; i++) {
-	//TODO: frequency
-	firings[i][0] = firings[k + i][0] - 1000;
+	firings[i][0] = firings[k + i][0] - frequency;
 	firings[i][1] = firings[k + i][1];
       }
       N_firings = N_firings - k;

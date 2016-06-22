@@ -1,14 +1,24 @@
+# emacs junk
 *~
+*#
+
+# eclipse junk
 .project
 .settings
 .cproject
+
+# executable stuff
 spnet
+/Default/
+
+# data files
 *.dat
 data/raw_*
 data/nn_feat_inp*.txt
 data/#*
 data/spike*
-octave*
 *.txt
 *.scp
-/Default/
+
+# testing artifacts
+octave*
