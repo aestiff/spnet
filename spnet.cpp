@@ -767,6 +767,8 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   //float scale = 1.0;
   //float labelScale = 1.0;
   //float shift = 0.66;
+  //ofstream labelData;
+  //int inFeat = 0;
   double updateMs = 1000.0 / frequency;
   bool done = false;
   bool preDone = false;
@@ -775,11 +777,9 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   float I[N];
   bool fileInput = false;
   ifstream inputData;
-  //ofstream labelData;
   string inputLine;
   string currentLine;
   int feat = 0;
-  //int inFeat = 0;
   ofstream outputFile;
   ofstream indexFile;
   ulong outByteCount = 0;
@@ -787,11 +787,17 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   queue<string> headers;
   queue<int> headerTimes;
   queue<int> tailTimes;
-  
-  int N_firings;				// the number of fired neurons 
-  const int N_firings_max = 150 * N;// upper limit on the number of fired neurons per sec
+
+  int N_recorded_units = 0;
+  for (i = 0; i < numClasses; i++){
+    N_recorded_units += record[i] ? count[i] : 0;
+  }
+  int N_recorded_firings = 0;
+  int N_firings = 1;				// the number of fired neurons 
+  const int N_firings_max = 150 * N * (frequency/1000);// upper limit on the number of fired neurons per sec
   int firings[N_firings_max][2];              // indices and timings of spikes
-  N_firings = 1;		// spike timings
+
+  // spike timings
   firings[0][0] = -D;	// put a dummy spike at -D for simulation efficiency 
   firings[0][1] = 0;	// index of the dummy spike  
 
@@ -812,7 +818,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	pos = inputLine.find(' ');
 	tok = inputLine.substr(0, pos);
 	feat = stoi(tok);
-	cout << feat;
+	// cout << feat;
 	// removing notion of "labels"
 	//tok = inputLine.substr(pos, inputLine.length() - 2);
 	//inFeat = stoi(tok);
@@ -998,6 +1004,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  for (i = 0; i < N; i++) {
 	    if (v[i] >= peak[unitClass[i]])    // did it fire?
 	      {
+		if (record[unitClass[i]]) {N_recorded_firings++;}
 		v[i] = c[unitClass[i]];	// voltage reset
 		u[i] += d[unitClass[i]];	// recovery variable reset
 		LTP[i * (frequency + 1 + D) + (t + D)] = A_plus[unitClass[i]];
@@ -1064,14 +1071,13 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    u[i] += a[unitClass[i]] * ((v[i] < caInact[unitClass[i]] ? bhyp[unitClass[i]] : b[unitClass[i]])
 					        * (v[i] - vr[unitClass[i]]) - u[i]);
 	    u[i] = min(umax[unitClass[i]],u[i]);
-	    LTP[i * (frequency + 1 + D) + (t + D + 1)] = LTPdecay[unitClass[i]]
+	    LTP[i * (frequency + 1 + D) + (t + D + 1)] = LTPdecay[unitClass[i]] * updateMs
 	      * LTP[i * (frequency + 1 + D) + (t + D)];
-	    LTD[i] *= LTDdecay[unitClass[i]];
+	    LTD[i] *= LTDdecay[unitClass[i]] * updateMs;
 	  }
 	  t++;
 	}
-      //cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N
-      //<< "\n";
+      //cout << "sec=" << sec << ", firing rate=" << float(N_firings) / N << "\n";
       //dense output in kaldi-mode, sparse (octave-compatible) otherwise.
       if (test){
 	if (kaldiMode) {
@@ -1100,7 +1106,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    if (firings[i][0] >= 0){  //rolled-over spikes have negative timings
 	      if (record[unitClass[firings[i][1]]]){ //only write if it's a recorded neuron.
 		//write everything that (didn't) happen in the interim
-		while (j < firings[i][0]){ //catch up to current millisecond
+		while (j < firings[i][0]){ //catch up to current step
 		  while (k < numClasses){
 		    if (record[k]){
 		      while (l < count[k]){
@@ -1164,7 +1170,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	    }
 	  }
 	  //done with last spike, pad out to the end of the second
-	  while (j < t){ //go until the last millisecond that was simulated
+	  while (j < t){ //go until the last step that was simulated
 	    while (k < numClasses){
 	      if (record[k]){
 		while (l < count[k]){
@@ -1255,6 +1261,10 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	done = true;
       }
     }
+  cout << "Recorded spikes: " << N_recorded_firings << "\n";
+  cout << "Number of recorded units: " << N_recorded_units << "\n";
+  cout << "Seconds simulated: " << (double)sec + (t / frequency) << "\n";
+  cout << "Average recorded firing rate: " << (double)N_recorded_firings / (sec + (t / frequency)) / N_recorded_units << "\n";
   outputFile.close();
   if (inputData.is_open()) {
     inputData.close();
