@@ -773,7 +773,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
   bool done = false;
   bool preDone = false;
   bool test = false;
-  int i, j, k, sec, t;
+  ulong i, j, k, sec, t;
   float I[N];
   bool fileInput = false;
   ifstream inputData;
@@ -898,7 +898,7 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       indexFile.open(outFileName + ".scp");
     }
   }
-  int testCounter =  0;
+  ulong testCounter =  0;
   //TODO: runoff
   int runoff = 1;
   bool endUtt = false;
@@ -1086,11 +1086,16 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	  //evaluating conditionals for every neuron at every millisecond.
 	  j = 0;
 	  k = 0;
-	  int l = 0;
-	  int base = 0;
+	  ulong l = 0;
+	  ulong base = 0;
 	  size_t pos = 0;
 	  string key = "";
 	  ulong offset = 0;
+	  if (!tailTimes.empty() && tailTimes.front() == j) {
+	    outputFile << "]\n";
+	    outByteCount += 2;
+	    tailTimes.pop();
+	  }
 	  if (!headerTimes.empty() && headerTimes.front() == j){
 	    string uttHead = headers.front();
 	    outputFile << uttHead << "\n  ";
