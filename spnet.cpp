@@ -1319,7 +1319,9 @@ Requires --num-feats and --step to be specified");
 				 "name of file to which to write spike timings",
 				 false, "spikes.dat", "string");
     ValueArg<int> frequencyArg("f", "frequency", "input sample rate in Hz", false, 1000, "integer");
-    
+    ValueArg<string> writeNetArg("w", "write",
+				 "write resulting network to named file", false,
+				 "", "string");
     cmd.add(inFile);
     cmd.add(maxTime);
     cmd.add(trainTime);
@@ -1331,6 +1333,7 @@ Requires --num-feats and --step to be specified");
     cmd.add(stepArg);
     cmd.add(outFileArg);
     cmd.add(frequencyArg);
+    cmd.add(writeNetArg);
     cmd.parse(argc, argv);
     string fileHandle = inFile.getValue();
     string netFilename = netFile.getValue();
@@ -1340,6 +1343,7 @@ Requires --num-feats and --step to be specified");
     int stepSize = stepArg.getValue();
     string outFile = outFileArg.getValue();
     int frequency = frequencyArg.getValue();
+    string trainedNet = writeNetArg.getValue();
     
     if (kaldiMode && (numFeats == 0 || stepSize == 0)){
       cerr << "Kaldi mode requires specification of num-feats and step";
@@ -1355,13 +1359,11 @@ Requires --num-feats and --step to be specified");
     } else {
       net = new SpikingNetwork(netFilename);
     }
-    // tests of constructors and serializer
-    //net->saveTo("network-test.dat");
-    //SpikingNetwork* net2 = new SpikingNetwork("network.dat");
-    //net2->saveTo("network2.dat");
-
     // ridiculous
     net->simulate(maxSecs, trainSecs, testSecs, fileHandle, scale, kaldiMode, numFeats, stepSize, outFile, frequency);
+    if (trainedNet != ""){
+      net->saveTo(trainedNet);      
+    }
   } catch (ArgException &e) {
     //do stuff
     cerr << e.what();
