@@ -1240,25 +1240,28 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       }
       N_firings = N_firings - k;
 
-      for (i = 0; i < N; i++) {
-	if (plastic[unitClass[i]]){// modify only plastic connections
-	  for (j = 0; j < M; j++) {
-	    s[i * M + j] += 0.001 + sd[i * M + j]; //only place for weight modification
-	    sd[i * M + j] *= 0.99; // momentum
-	    if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
-	      s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
-	    }
-	    if (max_weight[unitClass[i]] > 0 && s[i * M + j] < 0) {
-	      s[i * M + j] = 0.0;
-	    }
-	    if (max_weight[unitClass[i]] < 0 && s[i * M + j] > 0) {
-	      s[i * M + j] = 0.0;
+      if (!test){
+	for (i = 0; i < N; i++) {
+	  if (plastic[unitClass[i]]){// modify only plastic connections
+	    for (j = 0; j < M; j++) {
+	      s[i * M + j] += 0.001 + sd[i * M + j]; //only place for weight modification
+	      sd[i * M + j] *= 0.99; // momentum
+	      if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
+		s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
+	      }
+	      if (max_weight[unitClass[i]] > 0 && s[i * M + j] < 0) {
+		s[i * M + j] = 0.0;
+	      }
+	      if (max_weight[unitClass[i]] < 0 && s[i * M + j] > 0) {
+		s[i * M + j] = 0.0;
+	      }
 	    }
 	  }
 	}
+      } else {
+	testCounter++;
       }
       sec++;
-      testCounter = test ? testCounter + 1 : test;
       if (runoff > 0) {
 	runoff--;
       }
