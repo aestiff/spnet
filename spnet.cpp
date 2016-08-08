@@ -1243,8 +1243,8 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
       for (i = 0; i < N; i++) {
 	if (plastic[unitClass[i]]){// modify only plastic connections
 	  for (j = 0; j < M; j++) {
-	    s[i * M + j] += 0.01 + sd[i * M + j]; //only place for weight modification
-	    sd[i * M + j] *= 0.9; // ??
+	    s[i * M + j] += 0.001 + sd[i * M + j]; //only place for weight modification
+	    sd[i * M + j] *= 0.99; // momentum
 	    if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
 	      s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
 	    }
