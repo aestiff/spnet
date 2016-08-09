@@ -464,8 +464,12 @@ SpikingNetwork::SpikingNetwork(string filename){
     delays = new short[N*D*M];
     for (i = 0; i < N * D; i++){
       delays_length[i] = 0;
-      for (j = 0; j < M; j++){
-	delays[i * N * D + j] = -1;
+    }
+    for (i = 0; i < N; i++){
+      for (j = 0; j < D; j++){
+	for (k = 0; k < M; k++){
+	  delays[i * M * D + j * M + k] = -1;
+	}
       }
     }
 
