@@ -1022,9 +1022,11 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 
 		  // generalization handled by setting LTP curve parameters on class-basis
 		  // (would a switch save computation?)
-		  *sd_pre[i * 3 * M + j] += LTP[I_pre[i * 3 * M + j]
-						* (frequency + 1 + D)
-						+ (t + D - D_pre[i * 3 * M + j] - 1)];
+		  if (I_pre[i*3*M+j] != i){ // ignore self-synapses
+		    *sd_pre[i * 3 * M + j] += LTP[I_pre[i * 3 * M + j]
+						  * (frequency + 1 + D)
+						  + (t + D - D_pre[i * 3 * M + j] - 1)];
+		  }
 		}
 		firings[N_firings][0] = t;
 		firings[N_firings++][1] = i;
@@ -1059,10 +1061,12 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	      // LTD[i] spikes when neuron i spikes, then decays.
 	      // depression is only affected by most recent spike
 	      // non-plastic synapses handled by parameters of LTD curve.
-	      sd[firings[k][1] * M
-		 + delays[firings[k][1] * D * M
-			  + (t - firings[k][0]) * M + j]] -=
-		LTD[i];
+	      if (i != firings[k][1]){ // ignore self-synapses
+		sd[firings[k][1] * M
+		   + delays[firings[k][1] * D * M
+			    + (t - firings[k][0]) * M + j]] -=
+		  LTD[i];
+	      }
 	    }
 	  }
 
@@ -1248,16 +1252,18 @@ void SpikingNetwork::simulate(int maxSecs, int trainSecs, int testSecs,
 	for (i = 0; i < N; i++) {
 	  if (plastic[unitClass[i]]){// modify only plastic connections
 	    for (j = 0; j < M; j++) {
-	      s[i * M + j] += 0.001 + sd[i * M + j]; //only place for weight modification
-	      sd[i * M + j] *= 0.99; // momentum
-	      if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
-		s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
-	      }
-	      if (max_weight[unitClass[i]] > 0 && s[i * M + j] < 0) {
-		s[i * M + j] = 0.0;
-	      }
-	      if (max_weight[unitClass[i]] < 0 && s[i * M + j] > 0) {
-		s[i * M + j] = 0.0;
+	      if (post[i * M + j] != i){ //ignore self-synapses
+		s[i * M + j] += 0.001 + sd[i * M + j]; //only place for weight modification
+		sd[i * M + j] *= 0.9; // momentum
+		if (abs(s[i * M + j]) > abs(max_weight[unitClass[i]])){
+		  s[i * M + j] -= s[i * M + j] - max_weight[unitClass[i]];
+		}
+		if (max_weight[unitClass[i]] > 0 && s[i * M + j] < 0) {
+		  s[i * M + j] = 0.0;
+		}
+		if (max_weight[unitClass[i]] < 0 && s[i * M + j] > 0) {
+		  s[i * M + j] = 0.0;
+		}
 	      }
 	    }
 	  }
